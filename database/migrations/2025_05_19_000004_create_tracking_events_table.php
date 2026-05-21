@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('tracking_events', function (Blueprint $table): void {
             $table->uuid('id')->primary();
-            $table->foreignId('shop_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('event');
             $table->decimal('value', 10, 2)->default(0);
             $table->string('currency', 3)->default('CAD');
@@ -27,8 +27,8 @@ return new class extends Migration
             $table->string('idempotency_key')->nullable();
             $table->timestamp('occurred_at');
             $table->timestamps();
-            $table->unique(['shop_id', 'idempotency_key']);
-            $table->index(['shop_id', 'created_at']);
+            $table->unique(['user_id', 'idempotency_key']);
+            $table->index(['user_id', 'created_at']);
         });
     }
 

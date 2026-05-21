@@ -14,6 +14,7 @@ return new class extends Migration
             $table->id();
             $table->uuid('tracking_event_id');
             $table->foreign('tracking_event_id')->references('id')->on('tracking_events')->cascadeOnDelete();
+            $table->foreignId('platform_integration_id')->constrained()->cascadeOnDelete();
             $table->string('platform');
             $table->string('status')->default('queued');
             $table->unsignedTinyInteger('attempts')->default(0);
@@ -23,6 +24,7 @@ return new class extends Migration
             $table->timestamps();
             $table->index(['tracking_event_id']);
             $table->index(['status', 'created_at']);
+            $table->index(['platform_integration_id', 'status', 'created_at'], 'pd_integration_status_created_at_index');
         });
     }
 

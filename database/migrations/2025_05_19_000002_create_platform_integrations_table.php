@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('platform_integrations', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('shop_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('platform');
             $table->boolean('active')->default(false);
             $table->text('credentials')->nullable();
@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('last_error')->nullable();
             $table->timestamp('last_error_at')->nullable();
             $table->timestamps();
-            $table->unique(['shop_id', 'platform']);
+            $table->unique(['user_id', 'platform']);
         });
     }
 

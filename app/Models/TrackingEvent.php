@@ -9,12 +9,21 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * Raw record of a single inbound storefront event — one row per POST to /pixel/track.
+ *
+ * Persisted by PersistTrackingEvent before any platform dispatch begins, so the record
+ * exists in the database even if every downstream delivery fails. Each TrackingEvent may
+ * produce multiple PlatformDelivery rows: one per active PlatformIntegration at dispatch
+ * time. idempotency_key enforces exactly-once semantics for duplicate webhook deliveries
+ * from Shopify (unique on user_id + idempotency_key).
+ */
 final class TrackingEvent extends Model
 {
     use HasUuids;
 
     protected $fillable = [
-        'shop_id',
+        'user_id',
         'event',
         'value',
         'currency',
@@ -38,10 +47,10 @@ final class TrackingEvent extends Model
         ];
     }
 
-    /** @return BelongsTo<Shop, $this> */
-    public function shop(): BelongsTo
+    /** @return BelongsTo<User, $this> */
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Shop::class);
+        return $this->belongsTo(User::class);
     }
 
     /** @return HasMany<PlatformDelivery, $this> */
