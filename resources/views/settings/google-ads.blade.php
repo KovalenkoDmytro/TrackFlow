@@ -1,20 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Ads — TrackFlow</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-    <header class="bg-white border-b border-gray-200">
-        <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-            <h1 class="text-xl font-bold text-gray-900">TrackFlow</h1>
-            <span class="text-sm text-gray-500">{{ $shop->name ?? 'Unknown shop' }}</span>
-        </div>
-    </header>
+@extends('layouts.app')
 
-    <main class="max-w-2xl mx-auto px-4 py-8">
+@section('title', 'Google Ads — TrackFlow')
+
+@section('content')
+    <div class="max-w-2xl">
 
         <a href="{{ route('home') }}" class="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-6">
             &#8592; Back
@@ -30,7 +19,7 @@
                     <button
                         type="submit"
                         onclick="return confirm('Disconnect Google Ads? This will stop all conversion tracking.')"
-                        class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 transition"
+                        class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 transition"
                     >
                         Disconnect
                     </button>
@@ -58,9 +47,7 @@
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('customer_id') border-red-400 @enderror"
                 >
                 <p class="mt-1 text-xs text-gray-500">Your Google Ads account ID (not MCC)</p>
-                @error('customer_id')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('customer_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div>
@@ -74,9 +61,7 @@
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('mcc_id') border-red-400 @enderror"
                 >
                 <p class="mt-1 text-xs text-gray-500">Leave blank if you don't use a manager account</p>
-                @error('mcc_id')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('mcc_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div>
@@ -88,9 +73,7 @@
                     value="{{ old('developer_token', $credentials['developer_token'] ?? '') }}"
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('developer_token') border-red-400 @enderror"
                 >
-                @error('developer_token')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('developer_token') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div>
@@ -102,9 +85,7 @@
                     value="{{ old('oauth_client_id', $credentials['oauth']['client_id'] ?? '') }}"
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('oauth_client_id') border-red-400 @enderror"
                 >
-                @error('oauth_client_id')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('oauth_client_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div>
@@ -116,9 +97,7 @@
                     value="{{ old('oauth_client_secret', $credentials['oauth']['client_secret'] ?? '') }}"
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('oauth_client_secret') border-red-400 @enderror"
                 >
-                @error('oauth_client_secret')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('oauth_client_secret') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div>
@@ -129,15 +108,13 @@
                     rows="3"
                     class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('oauth_refresh_token') border-red-400 @enderror"
                 >{{ old('oauth_refresh_token', $credentials['oauth']['refresh_token'] ?? '') }}</textarea>
-                @error('oauth_refresh_token')
-                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                @enderror
+                @error('oauth_refresh_token') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <div class="pt-2">
                 <button
                     type="submit"
-                    class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition"
+                    class="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition"
                 >
                     Save &amp; Connect
                 </button>
@@ -177,6 +154,5 @@
             </div>
         @endif
 
-    </main>
-</body>
-</html>
+    </div>
+@endsection
