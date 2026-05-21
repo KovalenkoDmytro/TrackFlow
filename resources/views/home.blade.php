@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrackFlow</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window['app-bridge'] && {{ request()->query('embedded', 0) }}) {
+                var AppBridge = window['app-bridge'];
+                var app = AppBridge.createApp({
+                    apiKey: '{{ config('shopify-app.api_key') }}',
+                    host: '{{ request()->query('host', '') }}',
+                });
+            }
+        });
+    </script>
 </head>
 <body class="bg-gray-50 min-h-screen">
     <header class="bg-white border-b border-gray-200">
