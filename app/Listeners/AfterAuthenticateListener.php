@@ -7,10 +7,11 @@ namespace App\Listeners;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Osiset\ShopifyApp\Messaging\Events\AppInstalledEvent;
+use Osiset\ShopifyApp\Messaging\Events\ShopAuthenticatedEvent;
 
 final class AfterAuthenticateListener
 {
-    public function handle(AppInstalledEvent $event): void
+    public function handle(AppInstalledEvent|ShopAuthenticatedEvent $event): void
     {
         $shop = User::query()->find($event->shopId->toNative());
 

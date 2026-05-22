@@ -394,7 +394,9 @@ return [
         AppInstalledEvent::class => [
             AfterAuthenticateListener::class,
         ],
-        ShopAuthenticatedEvent::class => [],
+        ShopAuthenticatedEvent::class => [
+            AfterAuthenticateListener::class,
+        ],
         ShopDeletedEvent::class => [],
         AppUninstalledEvent::class => [],
         PlanActivatedEvent::class => [],
