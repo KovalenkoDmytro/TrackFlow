@@ -16,6 +16,10 @@ import { createApiFetch } from '../../api';
 const INITIAL_FORM = {
     measurement_id: '',
     api_secret: '',
+    property_id: '',
+    oauth_client_id: '',
+    oauth_client_secret: '',
+    oauth_refresh_token: '',
 };
 
 export default function Ga4() {
@@ -45,6 +49,10 @@ export default function Ga4() {
                     setForm({
                         measurement_id: data.credentials.measurement_id ?? '',
                         api_secret: data.credentials.api_secret ?? '',
+                        property_id: data.credentials.property_id ?? '',
+                        oauth_client_id: data.credentials.oauth_client_id ?? '',
+                        oauth_client_secret: data.credentials.oauth_client_secret ?? '',
+                        oauth_refresh_token: data.credentials.oauth_refresh_token ?? '',
                     });
                 }
             })
@@ -188,6 +196,59 @@ export default function Ga4() {
                             error={Boolean(errors.api_secret)}
                             fullWidth
                             required
+                        />
+
+                        <Typography variant="body2" color="text.secondary">
+                            Optional: provide these to automatically create Key Events (add_to_cart, begin_checkout, etc.) in your GA4 property.
+                        </Typography>
+
+                        <TextField
+                            label="Property ID"
+                            name="property_id"
+                            value={form.property_id}
+                            onChange={handleChange}
+                            helperText={
+                                errors.property_id ??
+                                'Numeric GA4 Property ID (Admin → Property Settings). Required for automatic Key Events creation.'
+                            }
+                            error={Boolean(errors.property_id)}
+                            fullWidth
+                        />
+
+                        <TextField
+                            label="OAuth Client ID"
+                            name="oauth_client_id"
+                            value={form.oauth_client_id}
+                            onChange={handleChange}
+                            helperText={
+                                errors.oauth_client_id ??
+                                'From Google Cloud Console → APIs & Services → Credentials'
+                            }
+                            error={Boolean(errors.oauth_client_id)}
+                            fullWidth
+                        />
+
+                        <TextField
+                            label="OAuth Client Secret"
+                            name="oauth_client_secret"
+                            type="password"
+                            value={form.oauth_client_secret}
+                            onChange={handleChange}
+                            helperText={errors.oauth_client_secret}
+                            error={Boolean(errors.oauth_client_secret)}
+                            fullWidth
+                        />
+
+                        <TextField
+                            label="OAuth Refresh Token"
+                            name="oauth_refresh_token"
+                            value={form.oauth_refresh_token}
+                            onChange={handleChange}
+                            helperText={errors.oauth_refresh_token}
+                            error={Boolean(errors.oauth_refresh_token)}
+                            fullWidth
+                            multiline
+                            rows={3}
                         />
 
                         <Box>
