@@ -47,44 +47,14 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
 
     private const string DEBUG_URL = 'https://www.google-analytics.com/debug/mp/collect';
 
-    private const string ADMIN_API_BASE = 'https://analyticsadmin.googleapis.com/v1beta';
-
     /**
-     * Exchange a stored OAuth refresh token for a short-lived access token.
+     * Verify that the given credentials can reach the Measurement Protocol debug endpoint.
      *
-     * @param  array<string, mixed>  $oauth  Must contain keys: client_id, client_secret, refresh_token.
-     *
-     * @throws \RuntimeException When Google's token endpoint rejects the request or returns no access_token.
-     */
-    private function getAccessToken(array $oauth): string
-    {
-        $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
-            'client_id' => $oauth['client_id'],
-            'client_secret' => $oauth['client_secret'],
-            'refresh_token' => $oauth['refresh_token'],
-            'grant_type' => 'refresh_token',
-        ]);
-
-        $data = $response->json();
-
-        if (empty($data['access_token'])) {
-            throw new \RuntimeException('Failed to obtain access token from Google OAuth.');
-        }
-
-        return $data['access_token'];
-    }
-
-    /**
-     * Verify that the given credentials can reach both the Measurement Protocol
-     * and the GA4 Admin API.
-     *
-     * Step 1 uses GA4's debug endpoint to validate measurement_id + api_secret.
+     * Uses GA4's debug endpoint to validate measurement_id + api_secret.
      * The endpoint always returns HTTP 200 — auth failures surface as ERROR-level
-     * validationMessages. Step 2 exchanges the OAuth refresh token for an access
-     * token and calls the Admin API key-events list endpoint to confirm Admin API
-     * access.
+     * validationMessages.
      *
-     * @param  array<string, mixed>  $credentials  Must contain: measurement_id, api_secret, property_id, oauth (array).
+     * @param  array<string, mixed>  $credentials  Must contain: measurement_id, api_secret.
      *
      * @throws \RuntimeException When the API rejects the credentials or validation fails.
      */
@@ -121,59 +91,17 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
 
             throw new \RuntimeException('GA4 validation failed: '.implode('; ', $descriptions));
         }
-
-        $accessToken = $this->getAccessToken($credentials['oauth']);
-        $propertyId = $credentials['property_id'];
-
-        $adminResponse = Http::withToken($accessToken)
-            ->get(self::ADMIN_API_BASE."/properties/{$propertyId}/keyEvents");
-
-        $adminStatus = $adminResponse->status();
-
-        if ($adminStatus < 200 || $adminStatus >= 300) {
-            $errorMessage = $this->extractApiError($adminResponse->json(), $adminResponse->body());
-            throw new \RuntimeException("GA4 Admin API error [{$adminStatus}]: {$errorMessage}");
-        }
     }
 
     /**
-     * Provision GA4 Key Events via the Admin API and persist ConversionActionMapping records.
+     * Persist ConversionActionMapping records for the standard GA4 e-commerce events.
      *
-     * Calls the GA4 Admin API to create any missing Key Events for the standard
-     * nine Shopify e-commerce events. Already-existing events are skipped (checked
-     * via a prefetch list). 409 ALREADY_EXISTS responses are silently ignored as a
-     * race-condition fallback. Non-fatal API errors are logged but do not abort the
-     * loop so a single failure does not block the remaining events.
-     *
-     * After Admin API operations the method falls through to the local DB upsert
-     * so ProcessTrackingEvent can look up the GA4 event name via ConversionActionMapping.
+     * GA4 does not require remote provisioning of Key Events. This method only
+     * creates the local ConversionActionMapping rows so ProcessTrackingEvent can
+     * look up the GA4 event name at dispatch time.
      */
     public function setupConversionActions(PlatformIntegration $integration): void
     {
-        $credentials = json_decode((string) $integration->credentials, true) ?? [];
-        $propertyId = $credentials['property_id'] ?? null;
-        $oauth = $credentials['oauth'] ?? null;
-
-        if ($propertyId !== null && is_array($oauth)) {
-            try {
-                $accessToken = $this->getAccessToken($oauth);
-                $existingEventNames = $this->fetchExistingKeyEventNames($accessToken, $propertyId);
-
-                foreach (self::GA4_EVENTS as $ga4EventName) {
-                    if (in_array($ga4EventName, $existingEventNames, true)) {
-                        continue;
-                    }
-
-                    $this->createKeyEvent($accessToken, $propertyId, $ga4EventName);
-                }
-            } catch (\Throwable $e) {
-                Log::error('GoogleAnalytics4Client: Admin API setup failed', [
-                    'integration_id' => $integration->getKey(),
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
         foreach (self::GA4_EVENTS as $shopifyEvent => $ga4EventName) {
             try {
                 ConversionActionMapping::query()->updateOrCreate(
@@ -193,73 +121,6 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
                     'error' => $e->getMessage(),
                 ]);
             }
-        }
-    }
-
-    /**
-     * Return all existing GA4 Key Event names for the given property.
-     *
-     * @param  string  $accessToken  Short-lived OAuth access token.
-     * @param  string  $propertyId  Numeric GA4 property ID.
-     * @return array<string>
-     *
-     * @throws \RuntimeException When the Admin API returns a non-2xx response.
-     */
-    private function fetchExistingKeyEventNames(string $accessToken, string $propertyId): array
-    {
-        $response = Http::withToken($accessToken)
-            ->get(self::ADMIN_API_BASE."/properties/{$propertyId}/keyEvents");
-
-        $status = $response->status();
-
-        if ($status < 200 || $status >= 300) {
-            $errorMessage = $this->extractApiError($response->json(), $response->body());
-            throw new \RuntimeException("GA4 Admin API error [{$status}]: {$errorMessage}");
-        }
-
-        $body = $response->json();
-        $keyEvents = $body['keyEvents'] ?? [];
-
-        return array_map(
-            static fn (array $event) => $event['eventName'] ?? '',
-            $keyEvents,
-        );
-    }
-
-    /**
-     * Create a single GA4 Key Event via the Admin API.
-     *
-     * 409 ALREADY_EXISTS responses are silently ignored — they occur when a
-     * concurrent job created the event between our prefetch and this POST.
-     * All other non-2xx responses are logged but not re-thrown so one failing
-     * event does not abort the remaining events in the setup loop.
-     *
-     * @param  string  $accessToken  Short-lived OAuth access token.
-     * @param  string  $propertyId  Numeric GA4 property ID.
-     * @param  string  $eventName  Standard GA4 event name (e.g. "purchase").
-     */
-    private function createKeyEvent(string $accessToken, string $propertyId, string $eventName): void
-    {
-        $response = Http::withToken($accessToken)
-            ->post(self::ADMIN_API_BASE."/properties/{$propertyId}/keyEvents", [
-                'eventName' => $eventName,
-                'countingMethod' => 'ONCE_PER_EVENT',
-            ]);
-
-        $status = $response->status();
-
-        if ($status === 409) {
-            return;
-        }
-
-        if ($status < 200 || $status >= 300) {
-            $errorMessage = $this->extractApiError($response->json(), $response->body());
-            Log::error('GoogleAnalytics4Client: failed to create key event', [
-                'property_id' => $propertyId,
-                'event_name' => $eventName,
-                'status' => $status,
-                'error' => $errorMessage,
-            ]);
         }
     }
 

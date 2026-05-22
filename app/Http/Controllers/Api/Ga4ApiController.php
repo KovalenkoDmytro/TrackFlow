@@ -15,8 +15,7 @@ use Illuminate\Http\Request;
 /**
  * JSON API surface for the GA4 settings page in the React SPA.
  *
- * GA4 credentials include a Measurement Protocol pair (measurement_id + api_secret)
- * and Admin API credentials (property_id + oauth) used to provision Key Events.
+ * GA4 uses only the Measurement Protocol — credentials are a measurement_id + api_secret pair.
  * Mirrors GoogleAdsApiController's structure.
  */
 final class Ga4ApiController extends Controller
@@ -42,10 +41,6 @@ final class Ga4ApiController extends Controller
                 'credentials' => [
                     'measurement_id' => '',
                     'api_secret' => '',
-                    'property_id' => '',
-                    'oauth_client_id' => '',
-                    'oauth_client_secret' => '',
-                    'oauth_refresh_token' => '',
                 ],
             ]);
         }
@@ -59,10 +54,6 @@ final class Ga4ApiController extends Controller
             'credentials' => [
                 'measurement_id' => $raw['measurement_id'] ?? '',
                 'api_secret' => $raw['api_secret'] ?? '',
-                'property_id' => $raw['property_id'] ?? '',
-                'oauth_client_id' => $raw['oauth']['client_id'] ?? '',
-                'oauth_client_secret' => $raw['oauth']['client_secret'] ?? '',
-                'oauth_refresh_token' => $raw['oauth']['refresh_token'] ?? '',
             ],
         ]);
     }
@@ -72,29 +63,19 @@ final class Ga4ApiController extends Controller
      *
      * Validates credentials with GoogleAnalytics4Client::testCredentials() before
      * saving so the merchant receives immediate feedback on invalid credentials.
-     * Dispatches CreateConversionActions as a background job on success to provision
-     * GA4 Key Events via the Admin API and persist the standard event name mappings.
+     * Dispatches CreateConversionActions as a background job on success to persist
+     * the standard event name mappings.
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'measurement_id' => ['required', 'string'],
             'api_secret' => ['required', 'string'],
-            'property_id' => ['required', 'string', 'regex:/^\d+$/'],
-            'oauth_client_id' => ['required', 'string'],
-            'oauth_client_secret' => ['required', 'string'],
-            'oauth_refresh_token' => ['required', 'string'],
         ]);
 
         $credentials = [
             'measurement_id' => trim($validated['measurement_id']),
             'api_secret' => trim($validated['api_secret']),
-            'property_id' => trim($validated['property_id']),
-            'oauth' => [
-                'client_id' => trim($validated['oauth_client_id']),
-                'client_secret' => trim($validated['oauth_client_secret']),
-                'refresh_token' => trim($validated['oauth_refresh_token']),
-            ],
         ];
 
         try {
