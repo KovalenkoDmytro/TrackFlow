@@ -29,31 +29,31 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * @var array<string, string>
      */
     private const array EVENT_CATEGORIES = [
-        'search'            => 'PAGE_VIEW',
-        'view_item'         => 'PAGE_VIEW',
-        'add_to_cart'       => 'ADD_TO_CART',
-        'view_cart'         => 'PAGE_VIEW',
-        'remove_from_cart'  => 'PAGE_VIEW',
-        'begin_checkout'    => 'BEGIN_CHECKOUT',
+        'search' => 'PAGE_VIEW',
+        'view_item' => 'PAGE_VIEW',
+        'add_to_cart' => 'ADD_TO_CART',
+        'view_cart' => 'PAGE_VIEW',
+        'remove_from_cart' => 'PAGE_VIEW',
+        'begin_checkout' => 'BEGIN_CHECKOUT',
         'add_shipping_info' => 'PAGE_VIEW',
-        'add_payment_info'  => 'PAGE_VIEW',
-        'purchase'          => 'PURCHASE',
+        'add_payment_info' => 'PAGE_VIEW',
+        'purchase' => 'PURCHASE',
     ];
 
     /**
      * Exchange a stored OAuth refresh token for a short-lived access token.
      *
-     * @param array<string, mixed> $oauth Must contain keys: client_id, client_secret, refresh_token.
+     * @param  array<string, mixed>  $oauth  Must contain keys: client_id, client_secret, refresh_token.
      *
      * @throws \RuntimeException When Google's token endpoint rejects the request or returns no access_token.
      */
     public function getAccessToken(array $oauth): string
     {
         $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
-            'client_id'     => $oauth['client_id'],
+            'client_id' => $oauth['client_id'],
             'client_secret' => $oauth['client_secret'],
             'refresh_token' => $oauth['refresh_token'],
-            'grant_type'    => 'refresh_token',
+            'grant_type' => 'refresh_token',
         ]);
 
         $data = $response->json();
@@ -72,8 +72,8 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * credentials are persisted so the merchant sees an error immediately rather
      * than discovering the problem when the first event fires.
      *
-     * @param array<string, mixed> $credentials Decrypted credentials from PlatformIntegration.
-     *                                          Expected keys: oauth (array), customer_id, developer_token, mcc_id (optional).
+     * @param  array<string, mixed>  $credentials  Decrypted credentials from PlatformIntegration.
+     *                                             Expected keys: oauth (array), customer_id, developer_token, mcc_id (optional).
      *
      * @throws \RuntimeException When the API responds with a non-2xx status.
      */
@@ -83,11 +83,17 @@ final class GoogleAdsClient implements ConversionPlatformContract
         $customerId = str_replace('-', '', $credentials['customer_id']);
 
         $response = Http::withHeaders($this->buildHeaders($accessToken, $credentials))
-            ->get("https://googleads.googleapis.com/v24/customers/{$customerId}/conversionActions");
+            ->post(
+                "https://googleads.googleapis.com/v24/customers/{$customerId}/googleAds:search",
+                [
+                    'query' => 'SELECT customer.id FROM customer LIMIT 1',
+                    'pageSize' => 1,
+                ],
+            );
 
         if (! $response->successful()) {
             $status = $response->status();
-            $errorMessage = $this->extractApiError($response->json());
+            $errorMessage = $this->extractApiError($response->json(), $response->body());
             throw new \RuntimeException("Google Ads API error [{$status}]: {$errorMessage}");
         }
     }
@@ -117,8 +123,8 @@ final class GoogleAdsClient implements ConversionPlatformContract
             } catch (\RuntimeException $e) {
                 Log::error('GoogleAdsClient: failed to create conversion action', [
                     'integration_id' => $integration->getKey(),
-                    'event'          => $event,
-                    'error'          => $e->getMessage(),
+                    'event' => $event,
+                    'error' => $e->getMessage(),
                 ]);
             }
         }
@@ -131,10 +137,9 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * GOOGLE_SEARCH_ATTRIBUTION_LAST_CLICK attribution model. The name is prefixed
      * with "TF - " to identify TrackFlow-managed actions in the Google Ads UI.
      *
-     * @param array<string, mixed> $credentials Decrypted credentials (same shape as testCredentials).
-     * @param string               $name        Shopify event name used as the action label (e.g. "purchase").
-     * @param string               $category    Google Ads conversion category (e.g. "PURCHASE", "ADD_TO_CART").
-     *
+     * @param  array<string, mixed>  $credentials  Decrypted credentials (same shape as testCredentials).
+     * @param  string  $name  Shopify event name used as the action label (e.g. "purchase").
+     * @param  string  $category  Google Ads conversion category (e.g. "PURCHASE", "ADD_TO_CART").
      * @return string The resource name of the newly created conversion action (e.g. "customers/123/conversionActions/456").
      *
      * @throws \RuntimeException When the API call fails or returns no resource name.
@@ -148,10 +153,10 @@ final class GoogleAdsClient implements ConversionPlatformContract
             'operations' => [
                 [
                     'create' => [
-                        'name'     => "TF - {$name}",
-                        'type'     => 'UPLOAD_CLICKS',
+                        'name' => "TF - {$name}",
+                        'type' => 'UPLOAD_CLICKS',
                         'category' => $category,
-                        'status'   => 'ENABLED',
+                        'status' => 'ENABLED',
                         'attribution_model_settings' => [
                             'attribution_model' => 'GOOGLE_SEARCH_ATTRIBUTION_LAST_CLICK',
                         ],
@@ -165,7 +170,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
 
         if (! $response->successful()) {
             $status = $response->status();
-            $errorMessage = $this->extractApiError($response->json());
+            $errorMessage = $this->extractApiError($response->json(), $response->body());
             throw new \RuntimeException("Failed to create conversion action [{$status}]: {$errorMessage}");
         }
 
@@ -188,10 +193,9 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * but the HTTP call itself succeeded — the method returns false in that case
      * so the caller can record a soft failure without triggering a job retry.
      *
-     * @param array<string, mixed>   $credentials Decrypted credentials.
-     * @param TrackingEventData      $data        The event payload including gclid, value, currency, etc.
-     * @param ConversionActionMapping $mapping    The mapping row that holds the Google Ads resource name.
-     *
+     * @param  array<string, mixed>  $credentials  Decrypted credentials.
+     * @param  TrackingEventData  $data  The event payload including gclid, value, currency, etc.
+     * @param  ConversionActionMapping  $mapping  The mapping row that holds the Google Ads resource name.
      * @return bool True when Google Ads accepted the conversion; false on partial failure.
      *
      * @throws \RuntimeException On network errors or non-2xx HTTP responses (job will retry).
@@ -210,9 +214,9 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * Kept as a named method (rather than inlined) so it remains independently
      * testable and callable from places that already hold the resource name string.
      *
-     * @param array<string, mixed> $credentials               Decrypted credentials.
-     * @param string               $conversionActionResourceName Google Ads resource name from ConversionActionMapping.
-     * @param TrackingEventData    $data                      The event payload.
+     * @param  array<string, mixed>  $credentials  Decrypted credentials.
+     * @param  string  $conversionActionResourceName  Google Ads resource name from ConversionActionMapping.
+     * @param  TrackingEventData  $data  The event payload.
      *
      * @throws \RuntimeException On non-2xx HTTP response.
      */
@@ -222,18 +226,18 @@ final class GoogleAdsClient implements ConversionPlatformContract
         $customerId = str_replace('-', '', $credentials['customer_id']);
 
         $conversion = [
-            'gclid'               => $data->gclid,
-            'conversion_action'   => $conversionActionResourceName,
+            'gclid' => $data->gclid,
+            'conversion_action' => $conversionActionResourceName,
             'conversion_date_time' => $data->occurredAt->format('Y-m-d H:i:sP'),
-            'conversion_value'    => $data->value,
-            'currency_code'       => $data->currency,
-            'order_id'            => $data->transactionId,
+            'conversion_value' => $data->value,
+            'currency_code' => $data->currency,
+            'order_id' => $data->transactionId,
         ];
 
         $conversion = array_filter($conversion, fn (mixed $v) => $v !== null);
 
         $body = [
-            'conversions'     => [$conversion],
+            'conversions' => [$conversion],
             'partial_failure' => true,
         ];
 
@@ -242,7 +246,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
 
         if (! $response->successful()) {
             $status = $response->status();
-            $errorMessage = $this->extractApiError($response->json());
+            $errorMessage = $this->extractApiError($response->json(), $response->body());
             throw new \RuntimeException("Failed to upload click conversion [{$status}]: {$errorMessage}");
         }
 
@@ -250,8 +254,8 @@ final class GoogleAdsClient implements ConversionPlatformContract
 
         if (! empty($result['partialFailureError'])) {
             Log::warning('GoogleAdsClient: partial failure on uploadClickConversion', [
-                'partial_failure_error'        => $result['partialFailureError'],
-                'conversion_action'            => $conversionActionResourceName,
+                'partial_failure_error' => $result['partialFailureError'],
+                'conversion_action' => $conversionActionResourceName,
             ]);
 
             return false;
@@ -267,16 +271,16 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * is present in credentials — required when the customer account is managed
      * under an MCC hierarchy.
      *
-     * @param  string               $accessToken Short-lived OAuth access token.
-     * @param  array<string, mixed> $credentials Must contain developer_token; optionally mcc_id.
+     * @param  string  $accessToken  Short-lived OAuth access token.
+     * @param  array<string, mixed>  $credentials  Must contain developer_token; optionally mcc_id.
      * @return array<string, string>
      */
     private function buildHeaders(string $accessToken, array $credentials): array
     {
         $headers = [
-            'Authorization'  => "Bearer {$accessToken}",
+            'Authorization' => "Bearer {$accessToken}",
             'developer-token' => $credentials['developer_token'],
-            'Content-Type'   => 'application/json',
+            'Content-Type' => 'application/json',
         ];
 
         $mccId = isset($credentials['mcc_id']) ? str_replace('-', '', (string) $credentials['mcc_id']) : '';
@@ -293,13 +297,20 @@ final class GoogleAdsClient implements ConversionPlatformContract
      *
      * Google Ads wraps errors in an "error" key with a "message" sub-key. Falls
      * back to JSON-encoding the full body so the raw payload is always visible in logs.
+     * When the decoded body is null (e.g. empty or non-JSON response), the raw body
+     * string is included in the message, truncated to 200 characters.
      *
-     * @param array<string, mixed>|null $responseBody Decoded JSON response body.
+     * @param  array<string, mixed>|null  $responseBody  Decoded JSON response body.
+     * @param  string|null  $rawBody  Raw response body string for fallback display.
      */
-    private function extractApiError(?array $responseBody): string
+    private function extractApiError(?array $responseBody, ?string $rawBody = null): string
     {
         if ($responseBody === null) {
-            return 'Unknown error (empty response body).';
+            $preview = $rawBody !== null ? substr(trim($rawBody), 0, 200) : '';
+
+            return $preview !== ''
+                ? "Unknown error (non-JSON response): {$preview}"
+                : 'Unknown error (empty response body).';
         }
 
         $error = $responseBody['error'] ?? null;

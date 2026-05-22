@@ -5,6 +5,7 @@ import createApp from '@shopify/app-bridge';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import Home from './pages/Home';
 import GoogleAds from './pages/settings/GoogleAds';
+import ComingSoon from './pages/settings/ComingSoon';
 
 const theme = createTheme({
     palette: {
@@ -49,6 +50,9 @@ function App() {
                     <Routes>
                         <Route path="/" element={<Home />} />
                         <Route path="/settings/google-ads" element={<GoogleAds />} />
+                        <Route path="/settings/meta" element={<ComingSoon />} />
+                        <Route path="/settings/tiktok" element={<ComingSoon />} />
+                        <Route path="/settings/ga4" element={<ComingSoon />} />
                     </Routes>
                 </BrowserRouter>
             </ThemeProvider>
