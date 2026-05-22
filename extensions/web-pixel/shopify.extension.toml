@@ -1,0 +1,21 @@
+api_version = "2024-04"
+
+[[extensions]]
+type = "web_pixel_extension"
+name = "TrackFlow Web Pixel"
+handle = "trackflow-web-pixel"
+
+[extensions.settings]
+type = "object"
+
+[[extensions.settings.fields]]
+key = "tracking_secret"
+name = "Tracking Secret"
+description = "Shop-specific secret for authenticating conversion events"
+type = "single_line_text_field"
+
+[[extensions.settings.fields]]
+key = "api_url"
+name = "API URL"
+description = "Conversion tracking API endpoint"
+type = "single_line_text_field"
