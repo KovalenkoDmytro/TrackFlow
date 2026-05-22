@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/conversions', [ConversionController::class, 'track']);
 
-Route::middleware(['auth'])->group(function (): void {
+Route::middleware(['auth:web'])->group(function (): void {
     Route::get('/shop-status', [ShopStatusController::class, 'index']);
 
     Route::prefix('settings')->group(function (): void {
