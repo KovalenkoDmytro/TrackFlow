@@ -57,10 +57,20 @@ class SyncWebPixel
         $errors = $response['body']['data']['webPixelCreate']['userErrors'] ?? [];
 
         if (! empty($errors)) {
-            Log::error('SyncWebPixel: webPixelCreate userErrors', [
-                'shop' => $shop->name,
-                'errors' => $errors,
-            ]);
+            $alreadyExists = collect($errors)->contains(
+                fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'already exists')
+            );
+
+            if ($alreadyExists) {
+                // Pixel already exists — fetch its ID and save it
+                Log::info('SyncWebPixel: pixel already exists, fetching ID', ['shop' => $shop->name]);
+                $this->fetchAndSaveExistingPixel($shop);
+            } else {
+                Log::error('SyncWebPixel: webPixelCreate userErrors', [
+                    'shop' => $shop->name,
+                    'errors' => $errors,
+                ]);
+            }
 
             return;
         }
@@ -73,6 +83,33 @@ class SyncWebPixel
             Log::info('SyncWebPixel: pixel created', ['shop' => $shop->name, 'pixel_id' => $pixelId]);
         } else {
             Log::error('SyncWebPixel: no pixel ID in response', [
+                'shop' => $shop->name,
+                'body' => $response['body'] ?? null,
+            ]);
+        }
+    }
+
+    private function fetchAndSaveExistingPixel(User $shop): void
+    {
+        $query = <<<'GQL'
+            query {
+                webPixel {
+                    id
+                    settings
+                }
+            }
+        GQL;
+
+        $response = $shop->api()->graph($query);
+
+        $pixelId = $response['body']['data']['webPixel']['id'] ?? null;
+
+        if ($pixelId !== null) {
+            $shop->shopify_pixel_id = $pixelId;
+            $shop->save();
+            Log::info('SyncWebPixel: saved existing pixel ID', ['shop' => $shop->name, 'pixel_id' => $pixelId]);
+        } else {
+            Log::error('SyncWebPixel: could not fetch existing pixel', [
                 'shop' => $shop->name,
                 'body' => $response['body'] ?? null,
             ]);
