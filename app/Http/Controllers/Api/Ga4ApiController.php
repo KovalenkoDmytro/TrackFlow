@@ -41,6 +41,10 @@ final class Ga4ApiController extends Controller
                 'credentials' => [
                     'measurement_id' => '',
                     'api_secret' => '',
+                    'property_id' => '',
+                    'oauth_client_id' => '',
+                    'oauth_client_secret' => '',
+                    'oauth_refresh_token' => '',
                 ],
             ]);
         }
@@ -54,6 +58,10 @@ final class Ga4ApiController extends Controller
             'credentials' => [
                 'measurement_id' => $raw['measurement_id'] ?? '',
                 'api_secret' => $raw['api_secret'] ?? '',
+                'property_id' => $raw['property_id'] ?? '',
+                'oauth_client_id' => $raw['oauth']['client_id'] ?? '',
+                'oauth_client_secret' => $raw['oauth']['client_secret'] ?? '',
+                'oauth_refresh_token' => $raw['oauth']['refresh_token'] ?? '',
             ],
         ]);
     }
@@ -71,12 +79,25 @@ final class Ga4ApiController extends Controller
         $validated = $request->validate([
             'measurement_id' => ['required', 'string'],
             'api_secret' => ['required', 'string'],
+            'property_id' => ['nullable', 'string', 'regex:/^\d+$/'],
+            'oauth_client_id' => ['nullable', 'string'],
+            'oauth_client_secret' => ['nullable', 'string'],
+            'oauth_refresh_token' => ['nullable', 'string'],
         ]);
 
         $credentials = [
             'measurement_id' => trim($validated['measurement_id']),
             'api_secret' => trim($validated['api_secret']),
         ];
+
+        if (! empty($validated['property_id'])) {
+            $credentials['property_id'] = trim($validated['property_id']);
+            $credentials['oauth'] = [
+                'client_id' => trim($validated['oauth_client_id'] ?? ''),
+                'client_secret' => trim($validated['oauth_client_secret'] ?? ''),
+                'refresh_token' => trim($validated['oauth_refresh_token'] ?? ''),
+            ];
+        }
 
         try {
             app(GoogleAnalytics4Client::class)->testCredentials($credentials);
