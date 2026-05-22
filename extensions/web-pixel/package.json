@@ -1,0 +1,9 @@
+{
+  "name": "trackflow-web-pixel",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "@shopify/web-pixels-extension": "^0.2.0"
+  }
+}
