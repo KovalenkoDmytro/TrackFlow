@@ -91,7 +91,8 @@ final class SetupPixelCommand extends Command
                 $shop->save();
                 $this->info("  Pixel created: {$pixelId}");
             } else {
-                $this->warn('  No pixel ID in response');
+                $this->warn('  No pixel ID in response. Full response:');
+                $this->line(json_encode($response['body'] ?? $response, JSON_PRETTY_PRINT));
             }
         } catch (\Throwable $e) {
             $this->error("  Exception: {$e->getMessage()}");
