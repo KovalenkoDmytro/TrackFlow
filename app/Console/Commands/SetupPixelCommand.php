@@ -79,7 +79,8 @@ final class SetupPixelCommand extends Command
             $errors = $response['body']['data']['webPixelCreate']['userErrors'] ?? [];
 
             if (! empty($errors)) {
-                $alreadyExists = collect($errors)->contains(
+                $errorsArray = json_decode(json_encode($errors), true);
+                $alreadyExists = collect($errorsArray)->contains(
                     fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'already exists')
                         || str_contains(strtolower($e['message'] ?? ''), 'already been set')
                 );
