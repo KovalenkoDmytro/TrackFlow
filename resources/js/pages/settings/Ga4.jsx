@@ -16,10 +16,6 @@ import { createApiFetch } from '../../api';
 const INITIAL_FORM = {
     measurement_id: '',
     api_secret: '',
-    property_id: '',
-    oauth_client_id: '',
-    oauth_client_secret: '',
-    oauth_refresh_token: '',
 };
 
 export default function Ga4() {
@@ -49,10 +45,6 @@ export default function Ga4() {
                     setForm({
                         measurement_id: data.credentials.measurement_id ?? '',
                         api_secret: data.credentials.api_secret ?? '',
-                        property_id: data.credentials.property_id ?? '',
-                        oauth_client_id: data.credentials.oauth_client_id ?? '',
-                        oauth_client_secret: data.credentials.oauth_client_secret ?? '',
-                        oauth_refresh_token: data.credentials.oauth_refresh_token ?? '',
                     });
                 }
             })
@@ -196,67 +188,6 @@ export default function Ga4() {
                             error={Boolean(errors.api_secret)}
                             fullWidth
                             required
-                        />
-
-                        <TextField
-                            label="Property ID"
-                            name="property_id"
-                            value={form.property_id}
-                            onChange={handleChange}
-                            placeholder="123456789"
-                            helperText={
-                                errors.property_id ??
-                                'Numeric GA4 Property ID from Admin → Property Settings (e.g. 123456789)'
-                            }
-                            error={Boolean(errors.property_id)}
-                            fullWidth
-                            required
-                        />
-
-                        <TextField
-                            label="OAuth Client ID"
-                            name="oauth_client_id"
-                            value={form.oauth_client_id}
-                            onChange={handleChange}
-                            helperText={
-                                errors.oauth_client_id ??
-                                'From Google Cloud Console → APIs & Services → Credentials'
-                            }
-                            error={Boolean(errors.oauth_client_id)}
-                            fullWidth
-                            required
-                        />
-
-                        <TextField
-                            label="OAuth Client Secret"
-                            name="oauth_client_secret"
-                            type="password"
-                            value={form.oauth_client_secret}
-                            onChange={handleChange}
-                            helperText={
-                                errors.oauth_client_secret ??
-                                'From Google Cloud Console → APIs & Services → Credentials'
-                            }
-                            error={Boolean(errors.oauth_client_secret)}
-                            fullWidth
-                            required
-                        />
-
-                        <TextField
-                            label="OAuth Refresh Token"
-                            name="oauth_refresh_token"
-                            value={form.oauth_refresh_token}
-                            onChange={handleChange}
-                            helperText={
-                                errors.oauth_refresh_token ??
-                                'Must include analytics.edit scope'
-                            }
-                            error={Boolean(errors.oauth_refresh_token)}
-                            fullWidth
-                            required
-                            multiline
-                            rows={3}
-                            inputProps={{ style: { fontFamily: 'monospace' } }}
                         />
 
                         <Box>
