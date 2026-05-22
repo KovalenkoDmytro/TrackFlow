@@ -59,6 +59,7 @@ class SyncWebPixel
         if (! empty($errors)) {
             $alreadyExists = collect($errors)->contains(
                 fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'already exists')
+                    || str_contains(strtolower($e['message'] ?? ''), 'already been set')
             );
 
             if ($alreadyExists) {
