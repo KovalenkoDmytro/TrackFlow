@@ -79,7 +79,17 @@ final class SetupPixelCommand extends Command
             $errors = $response['body']['data']['webPixelCreate']['userErrors'] ?? [];
 
             if (! empty($errors)) {
-                $this->error('  userErrors: '.json_encode($errors));
+                $alreadyExists = collect($errors)->contains(
+                    fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'already exists')
+                        || str_contains(strtolower($e['message'] ?? ''), 'already been set')
+                );
+
+                if ($alreadyExists) {
+                    $this->line('  Pixel already exists — fetching existing ID...');
+                    $this->fetchAndSaveExistingPixel($shop);
+                } else {
+                    $this->error('  userErrors: '.json_encode($errors));
+                }
 
                 return;
             }
@@ -100,6 +110,34 @@ final class SetupPixelCommand extends Command
                 'shop' => $shop->name,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function fetchAndSaveExistingPixel(User $shop): void
+    {
+        $query = <<<'GQL'
+            query {
+                webPixel {
+                    id
+                    settings
+                }
+            }
+        GQL;
+
+        try {
+            $response = $shop->api()->graph($query);
+            $pixelId = $response['body']['data']['webPixel']['id'] ?? null;
+
+            if ($pixelId !== null) {
+                $shop->shopify_pixel_id = $pixelId;
+                $shop->save();
+                $this->info("  Saved existing pixel ID: {$pixelId}");
+            } else {
+                $this->error('  Could not fetch existing pixel. Response:');
+                $this->line(json_encode($response['body'] ?? $response, JSON_PRETTY_PRINT));
+            }
+        } catch (\Throwable $e) {
+            $this->error("  Exception fetching pixel: {$e->getMessage()}");
         }
     }
 }
