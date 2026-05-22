@@ -283,7 +283,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
             'Content-Type' => 'application/json',
         ];
 
-        $mccId = isset($credentials['mcc_id']) ? str_replace('-', '', (string) $credentials['mcc_id']) : '';
+        $mccId = ! empty($credentials['mcc_id']) ? str_replace('-', '', (string) $credentials['mcc_id']) : '';
 
         if ($mccId !== '') {
             $headers['login-customer-id'] = $mccId;

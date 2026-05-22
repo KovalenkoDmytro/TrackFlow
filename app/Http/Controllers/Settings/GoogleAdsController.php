@@ -68,7 +68,7 @@ final class GoogleAdsController extends Controller
         $shop = $request->user();
 
         $customerId = str_replace('-', '', $validated['customer_id']);
-        $mccId = isset($validated['mcc_id']) ? str_replace('-', '', $validated['mcc_id']) : null;
+        $mccId = ! empty($validated['mcc_id']) ? str_replace('-', '', $validated['mcc_id']) : null;
 
         $credentials = [
             'customer_id' => $customerId,
