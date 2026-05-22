@@ -24,11 +24,10 @@ export function createApiFetch(app) {
                 const token = await getSessionToken(app);
                 headers['Authorization'] = `Bearer ${token}`;
             } catch {
-                // App Bridge not fully initialised (e.g. dev preview without valid host).
-                // Proceed without the token — verify.shopify middleware handles rejection.
+                // App Bridge not fully initialised — fall back to cookie auth.
             }
         }
 
-        return fetch(url, { ...options, headers });
+        return fetch(url, { ...options, headers, credentials: 'include' });
     };
 }
