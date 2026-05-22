@@ -85,10 +85,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
         $response = Http::withHeaders($this->buildHeaders($accessToken, $credentials))
             ->post(
                 "https://googleads.googleapis.com/v24/customers/{$customerId}/googleAds:search",
-                [
-                    'query' => 'SELECT customer.id FROM customer LIMIT 1',
-                    'pageSize' => 1,
-                ],
+                ['query' => 'SELECT customer.id FROM customer'],
             );
 
         if (! $response->successful()) {
