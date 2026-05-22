@@ -8,10 +8,57 @@ import {
     Card,
     CardContent,
     CircularProgress,
+    Link,
+    Paper,
     TextField,
     Typography,
 } from '@mui/material';
 import { createApiFetch } from '../../api';
+
+function isScopeError(message) {
+    if (!message) return false;
+    const lower = message.toLowerCase();
+    return lower.includes('insufficient') || lower.includes('scopes');
+}
+
+function ScopeErrorPanel() {
+    return (
+        <Paper variant="outlined" sx={{ mt: 2, p: 2, borderColor: 'warning.light' }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                Wrong OAuth scope
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+                The OAuth Refresh Token must have the <code>analytics.edit</code> scope. Generate a new token at{' '}
+                <Link href="https://developers.google.com/oauthplayground/" target="_blank" rel="noopener">
+                    Google OAuth Playground
+                </Link>
+                :
+            </Typography>
+            <Box component="ol" sx={{ pl: 2.5, m: 0 }}>
+                <Box component="li">
+                    <Typography variant="body2">
+                        Click ⚙️ → enable "Use your own OAuth credentials" → enter Client ID and Secret
+                    </Typography>
+                </Box>
+                <Box component="li">
+                    <Typography variant="body2">
+                        Find <strong>Google Analytics Admin API v1</strong> → select <code>analytics.edit</code>
+                    </Typography>
+                </Box>
+                <Box component="li">
+                    <Typography variant="body2">
+                        Click <strong>Authorize APIs</strong> → <strong>Exchange authorization code for tokens</strong>
+                    </Typography>
+                </Box>
+                <Box component="li">
+                    <Typography variant="body2">
+                        Copy the new <code>refresh_token</code> and paste it above
+                    </Typography>
+                </Box>
+            </Box>
+        </Paper>
+    );
+}
 
 const INITIAL_FORM = {
     measurement_id: '',
@@ -21,6 +68,25 @@ const INITIAL_FORM = {
     oauth_client_secret: '',
     oauth_refresh_token: '',
 };
+
+const DRAFT_KEY = 'trackflow_ga4_draft';
+const DRAFT_FIELDS = ['property_id', 'oauth_client_id', 'oauth_client_secret', 'oauth_refresh_token'];
+
+function loadDraft() {
+    try {
+        return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+    } catch {
+        return {};
+    }
+}
+
+function saveDraft(form) {
+    const draft = {};
+    DRAFT_FIELDS.forEach((k) => {
+        draft[k] = form[k];
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
 
 export default function Ga4() {
     const app = useShopifyApp();
@@ -44,17 +110,16 @@ export default function Ga4() {
                 return res.json();
             })
             .then((data) => {
+                const draft = loadDraft();
                 setConnected(data.connected ?? false);
-                if (data.credentials) {
-                    setForm({
-                        measurement_id: data.credentials.measurement_id ?? '',
-                        api_secret: data.credentials.api_secret ?? '',
-                        property_id: data.credentials.property_id ?? '',
-                        oauth_client_id: data.credentials.oauth_client_id ?? '',
-                        oauth_client_secret: data.credentials.oauth_client_secret ?? '',
-                        oauth_refresh_token: data.credentials.oauth_refresh_token ?? '',
-                    });
-                }
+                setForm({
+                    measurement_id: data.credentials?.measurement_id ?? '',
+                    api_secret: data.credentials?.api_secret ?? '',
+                    property_id: data.credentials?.property_id || draft.property_id || '',
+                    oauth_client_id: data.credentials?.oauth_client_id || draft.oauth_client_id || '',
+                    oauth_client_secret: data.credentials?.oauth_client_secret || draft.oauth_client_secret || '',
+                    oauth_refresh_token: data.credentials?.oauth_refresh_token || draft.oauth_refresh_token || '',
+                });
             })
             .catch((err) => setApiError(err.message))
             .finally(() => setLoading(false));
@@ -63,7 +128,13 @@ export default function Ga4() {
 
     function handleChange(e) {
         const { name, value } = e.target;
-        setForm((prev) => ({ ...prev, [name]: value }));
+        setForm((prev) => {
+            const newForm = { ...prev, [name]: value };
+            if (DRAFT_FIELDS.includes(name)) {
+                saveDraft(newForm);
+            }
+            return newForm;
+        });
         setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
 
@@ -94,6 +165,7 @@ export default function Ga4() {
 
             setSuccessMessage('GA4 connected. Event mappings are being configured in the background.');
             setConnected(true);
+            localStorage.removeItem(DRAFT_KEY);
         } catch {
             setApiError('Network error. Please try again.');
         } finally {
@@ -164,9 +236,12 @@ export default function Ga4() {
             )}
 
             {apiError && (
-                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setApiError('')}>
-                    {apiError}
-                </Alert>
+                <Box sx={{ mb: 3 }}>
+                    <Alert severity="error" onClose={() => setApiError('')}>
+                        {apiError}
+                    </Alert>
+                    {isScopeError(apiError) && <ScopeErrorPanel />}
+                </Box>
             )}
 
             <Card variant="outlined">
