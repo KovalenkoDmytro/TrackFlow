@@ -15,6 +15,10 @@ export async function getAnalytics(
     search.set('end_date', params.end_date ?? '');
   }
 
+  if (params.platform) {
+    search.set('platform', params.platform);
+  }
+
   const res = await client(`/api/analytics?${search.toString()}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };

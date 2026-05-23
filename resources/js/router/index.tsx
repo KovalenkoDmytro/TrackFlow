@@ -9,6 +9,7 @@ import { ComingSoonPage } from '../features/settings/ComingSoonPage';
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
   { path: '/analytics', element: <AnalyticsPage /> },
+  { path: '/analytics/platform/:platform', element: <AnalyticsPage /> },
   { path: '/settings/google-ads', element: <GoogleAdsPage /> },
   { path: '/settings/ga4', element: <Ga4Page /> },
   { path: '/settings/meta', element: <ComingSoonPage /> },

@@ -57,6 +57,7 @@ export function HomePage() {
             bg={platform.bg}
             connected={Boolean(integrations[platform.key])}
             onNavigate={() => navigate(platform.route)}
+            onViewEvents={() => navigate(`/analytics/platform/${platform.key}`)}
           />
         ))}
       </Box>
