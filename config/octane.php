@@ -26,7 +26,11 @@ return [
         'port' => env('OCTANE_ADMIN_PORT', 9001),
     ],
 
-    'listeners' => [],
+    'listeners' => [
+        \Laravel\Octane\Events\RequestReceived::class => [
+            \App\Octane\Listeners\FlushShopifyBindings::class,
+        ],
+    ],
 
     'warm' => [],
 
