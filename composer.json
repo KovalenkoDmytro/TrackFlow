@@ -9,6 +9,7 @@
         "php": "^8.3",
         "kyon147/laravel-shopify": "^26.1",
         "laravel/framework": "^13.8",
+        "laravel/octane": "^3.0",
         "laravel/tinker": "^3.0",
         "lorisleiva/laravel-actions": "^2.10",
         "spatie/laravel-data": "^4.23"
