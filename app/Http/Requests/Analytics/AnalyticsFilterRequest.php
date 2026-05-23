@@ -39,6 +39,7 @@ final class AnalyticsFilterRequest extends FormRequest
             'date' => ['nullable', 'date_format:Y-m-d'],
             'start_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range'],
             'end_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range', 'after_or_equal:start_date'],
+            'platform' => ['nullable', 'string', 'in:google_ads,meta,tiktok,ga4'],
         ];
     }
 
