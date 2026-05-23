@@ -33,6 +33,7 @@ final class AnalyticsController extends Controller
         $today = CarbonImmutable::now($timezone)->startOfDay();
 
         $mode = $request->input('mode');
+        $platform = $request->input('platform');
 
         [$start, $end, $label] = match ($mode) {
             'range' => $this->buildRangeBounds(
@@ -47,7 +48,7 @@ final class AnalyticsController extends Controller
             ),
         };
 
-        $counts = $this->getEventCounts->handle($shop, $start, $end);
+        $counts = $this->getEventCounts->handle($shop, $start, $end, $platform);
         $total = (int) array_sum(array_map(fn (array $c): int => $c['count'], $counts));
 
         $days = (int) CarbonImmutable::parse($start->toDateString())->diffInDays(CarbonImmutable::parse($end->toDateString())) + 1;
@@ -55,6 +56,7 @@ final class AnalyticsController extends Controller
         return response()->json([
             'filters' => [
                 'mode' => $mode,
+                'platform' => $platform,
                 'date' => $mode === 'single_day' ? $start->toDateString() : null,
                 'start_date' => $mode === 'range' ? $start->toDateString() : null,
                 'end_date' => $mode === 'range' ? $end->toDateString() : null,

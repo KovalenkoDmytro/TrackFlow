@@ -28,14 +28,31 @@ final class GetEventCountsForPeriod
      *
      * $end should be the end of the last day (23:59:59) so the boundary day is included.
      *
+     * When $platform is provided, only events that carry at least one tracking
+     * identifier for that platform are counted:
+     *   - google_ads → gclid is not null
+     *   - meta       → fbp or fbc is not null
+     *   - tiktok     → ttclid is not null
+     *   - ga4        → ga_client_id is not null
+     *
      * @return list<EventCount>
      */
-    public function handle(User $shop, CarbonImmutable $start, CarbonImmutable $end): array
+    public function handle(User $shop, CarbonImmutable $start, CarbonImmutable $end, ?string $platform = null): array
     {
-        /** @var array<string, int> $rawCounts */
-        $rawCounts = TrackingEvent::query()
+        $query = TrackingEvent::query()
             ->where('user_id', '=', $shop->getKey())
-            ->whereBetween('occurred_at', [$start, $end])
+            ->whereBetween('occurred_at', [$start, $end]);
+
+        match ($platform) {
+            'google_ads' => $query->whereNotNull('gclid'),
+            'meta' => $query->where(fn ($q) => $q->whereNotNull('fbp')->orWhereNotNull('fbc')),
+            'tiktok' => $query->whereNotNull('ttclid'),
+            'ga4' => $query->whereNotNull('ga_client_id'),
+            default => null,
+        };
+
+        /** @var array<string, int> $rawCounts */
+        $rawCounts = $query
             ->selectRaw('event, COUNT(*) as count')
             ->groupBy('event')
             ->pluck('count', 'event')
