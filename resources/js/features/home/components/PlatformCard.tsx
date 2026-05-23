@@ -7,9 +7,10 @@ interface PlatformCardProps {
   bg: string;
   connected: boolean;
   onNavigate: () => void;
+  onViewEvents: () => void;
 }
 
-export function PlatformCard({ label, initial, color, bg, connected, onNavigate }: PlatformCardProps) {
+export function PlatformCard({ label, initial, color, bg, connected, onNavigate, onViewEvents }: PlatformCardProps) {
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -34,9 +35,14 @@ export function PlatformCard({ label, initial, color, bg, connected, onNavigate 
             />
           </Box>
         </Box>
-        <Button variant="outlined" size="small" onClick={onNavigate}>
-          {connected ? 'Manage' : 'Connect'}
-        </Button>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
+          <Button variant="outlined" size="small" onClick={onNavigate}>
+            {connected ? 'Manage' : 'Connect'}
+          </Button>
+          <Button variant="outlined" size="small" onClick={onViewEvents}>
+            Events
+          </Button>
+        </Box>
       </CardContent>
     </Card>
   );

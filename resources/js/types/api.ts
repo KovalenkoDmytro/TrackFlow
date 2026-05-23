@@ -16,6 +16,7 @@ export interface AnalyticsParams {
   date?: string;
   start_date?: string;
   end_date?: string;
+  platform?: string;
 }
 
 export interface EventCount {

@@ -1,6 +1,7 @@
 // resources/js/features/analytics/AnalyticsPage.tsx
 import { useState } from 'react';
-import { Alert, Box, Card, Typography } from '@mui/material';
+import { useParams } from 'react-router-dom';
+import { Alert, Box, Button, Card, Typography } from '@mui/material';
 import { PageLayout } from '../../components/ui/PageLayout';
 import { ModeToggle } from './components/ModeToggle';
 import { DayNavigator } from './components/DayNavigator';
@@ -9,11 +10,19 @@ import { EventCountsTable } from './components/EventCountsTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import type { AnalyticsMode, AnalyticsParams } from '../../types/api';
 
+const PLATFORM_LABELS: Record<string, string> = {
+  google_ads: 'Google Ads',
+  meta: 'Meta',
+  tiktok: 'TikTok',
+  ga4: 'GA4',
+};
+
 function todayString(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 export function AnalyticsPage() {
+  const { platform } = useParams<{ platform?: string }>();
   const today = todayString();
 
   const [mode, setMode] = useState<AnalyticsMode>('single_day');
@@ -23,8 +32,8 @@ export function AnalyticsPage() {
 
   const params: AnalyticsParams =
     mode === 'single_day'
-      ? { mode, date }
-      : { mode, start_date: startDate, end_date: endDate };
+      ? { mode, date, platform }
+      : { mode, start_date: startDate, end_date: endDate, platform };
 
   const { data, isFetching, error } = useAnalytics(params);
 
@@ -32,8 +41,16 @@ export function AnalyticsPage() {
   const total = data?.summary?.total ?? 0;
   const period = data?.summary?.period ?? null;
 
+  const title = platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
+
+  const actions = platform ? (
+    <Button variant="text" size="small" href="/analytics">
+      All Events
+    </Button>
+  ) : undefined;
+
   return (
-    <PageLayout title="Analytics" maxWidth={800} backTo="/">
+    <PageLayout title={title} maxWidth={800} backTo="/" actions={actions}>
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error.message}
