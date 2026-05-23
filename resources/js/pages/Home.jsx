@@ -64,9 +64,14 @@ export default function Home() {
 
     return (
         <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
-            <Typography variant="h5" fontWeight={700} gutterBottom>
-                TrackFlow
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h5" fontWeight={700}>
+                    TrackFlow
+                </Typography>
+                <Button variant="outlined" size="small" onClick={() => navigate('/analytics')}>
+                    Analytics
+                </Button>
+            </Box>
 
             {/* Pixel status */}
             <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>

@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import GoogleAds from './pages/settings/GoogleAds';
 import Ga4 from './pages/settings/Ga4';
 import ComingSoon from './pages/settings/ComingSoon';
+import Analytics from './pages/analytics/Analytics';
 
 const theme = createTheme({
     palette: {
@@ -54,6 +55,7 @@ function App() {
                         <Route path="/settings/meta" element={<ComingSoon />} />
                         <Route path="/settings/tiktok" element={<ComingSoon />} />
                         <Route path="/settings/ga4" element={<Ga4 />} />
+                        <Route path="/analytics" element={<Analytics />} />
                     </Routes>
                 </BrowserRouter>
             </ThemeProvider>

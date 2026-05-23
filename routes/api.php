@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\Ga4ApiController;
 use App\Http\Controllers\Api\GoogleAdsApiController;
 use App\Http\Controllers\Api\ShopStatusController;
@@ -12,6 +13,7 @@ Route::post('/conversions', [ConversionController::class, 'track']);
 
 Route::middleware(['auth:web'])->group(function (): void {
     Route::get('/shop-status', [ShopStatusController::class, 'index']);
+    Route::get('/analytics', [AnalyticsController::class, 'index']);
 
     Route::prefix('settings')->group(function (): void {
         Route::get('/google-ads', [GoogleAdsApiController::class, 'show']);
