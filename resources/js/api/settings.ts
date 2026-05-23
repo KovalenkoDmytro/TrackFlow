@@ -25,14 +25,14 @@ export async function saveGoogleAdsSettings(
     method: 'POST',
     body: JSON.stringify(data),
   });
-  const body = await res.json() as Record<string, unknown>;
-  if (res.status === 422 && body['errors']) {
-    throw new ValidationError(body['errors'] as Record<string, string[]>);
+  const body = await res.json() as GoogleAdsSaveResponse | { errors?: Record<string, string[]>; error?: string };
+  if (res.status === 422 && 'errors' in body && body['errors']) {
+    throw new ValidationError(body['errors']);
   }
   if (!res.ok) {
-    throw new Error((body['error'] as string | undefined) ?? 'An unexpected error occurred.');
+    throw new Error(('error' in body ? body['error'] : undefined) ?? 'An unexpected error occurred.');
   }
-  return body as unknown as GoogleAdsSaveResponse;
+  return body as GoogleAdsSaveResponse;
 }
 
 export async function deleteGoogleAdsSettings(client: ApiClient): Promise<void> {

@@ -2,9 +2,10 @@
 import { getSessionToken } from '@shopify/app-bridge/utilities';
 import type { ClientApplication } from '../types/shopify';
 
-const BASE_URL = import.meta.env.DEV
+const BASE_URL = (import.meta.env.DEV
   ? (import.meta.env.VITE_APP_URL ?? 'http://localhost:8000')
-  : '';
+  : ''
+).replace(/\/$/, '');
 
 export type ApiClient = (url: string, options?: RequestInit) => Promise<Response>;
 
