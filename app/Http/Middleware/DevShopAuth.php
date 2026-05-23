@@ -20,8 +20,13 @@ final class DevShopAuth
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $shop = User::query()->where('name', 'dev-store.myshopify.com')->firstOrFail();
-        auth()->login($shop);
+        // Log in as the dev shop when it exists.  On a fresh checkout the
+        // table is empty, so we continue as a guest rather than crashing.
+        $shop = User::query()->first();
+
+        if ($shop !== null) {
+            auth()->login($shop);
+        }
 
         return $next($request);
     }

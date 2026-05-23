@@ -1,22 +1,15 @@
-// resources/js/features/home/HomePage.tsx
 import { useNavigate } from 'react-router-dom';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Typography } from '@mui/material';
 import { useShopStatus } from './hooks/useShopStatus';
 import { LoadingState } from '../../components/ui/LoadingState';
+import { PixelStatusCard } from './components/PixelStatusCard';
+import { PlatformCard } from './components/PlatformCard';
 
 const PLATFORMS = [
-  { key: 'google_ads', label: 'Google Ads',  initial: 'G', color: '#4285F4', bg: '#e8f0fe', route: '/settings/google-ads' },
-  { key: 'meta',       label: 'Meta',         initial: 'M', color: '#1877F2', bg: '#e7f3ff', route: '/settings/meta' },
-  { key: 'tiktok',     label: 'TikTok',       initial: 'T', color: '#ffffff', bg: '#010101', route: '/settings/tiktok' },
-  { key: 'ga4',        label: 'GA4',           initial: 'A', color: '#E37400', bg: '#fff3e0', route: '/settings/ga4' },
+  { key: 'google_ads', label: 'Google Ads', initial: 'G', color: '#4285F4', bg: '#e8f0fe', route: '/settings/google-ads' },
+  { key: 'meta',       label: 'Meta',        initial: 'M', color: '#1877F2', bg: '#e7f3ff', route: '/settings/meta' },
+  { key: 'tiktok',     label: 'TikTok',      initial: 'T', color: '#ffffff', bg: '#010101', route: '/settings/tiktok' },
+  { key: 'ga4',        label: 'GA4',          initial: 'A', color: '#E37400', bg: '#fff3e0', route: '/settings/ga4' },
 ] as const;
 
 export function HomePage() {
@@ -33,7 +26,6 @@ export function HomePage() {
     );
   }
 
-  const shop = data?.shop;
   const integrations = data?.integrations ?? {};
 
   return (
@@ -50,64 +42,23 @@ export function HomePage() {
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
         Pixel Status
       </Typography>
-      <Card variant="outlined" sx={{ mb: 4 }}>
-        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {shop?.shopify_pixel_id ? (
-            <>
-              <Chip label="Active" color="success" size="small" />
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                {shop.shopify_pixel_id}
-              </Typography>
-            </>
-          ) : (
-            <Chip label="Inactive — pixel will be created on next authentication" size="small" />
-          )}
-        </CardContent>
-      </Card>
+      <PixelStatusCard pixelId={data?.shop?.shopify_pixel_id} />
 
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
         Platform Integrations
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-        {PLATFORMS.map((platform) => {
-          const connected = Boolean(integrations[platform.key]);
-          return (
-            <Box key={platform.key}>
-              <Card variant="outlined">
-                <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Box
-                      sx={{
-                        width: 36, height: 36, borderRadius: '50%',
-                        bgcolor: platform.bg,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 700, fontSize: 14, color: platform.color,
-                      }}
-                    >
-                      {platform.initial}
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{platform.label}</Typography>
-                      <Chip
-                        label={connected ? 'Connected' : 'Not Connected'}
-                        color={connected ? 'success' : 'default'}
-                        size="small"
-                        sx={{ mt: 0.5 }}
-                      />
-                    </Box>
-                  </Box>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => navigate(platform.route)}
-                  >
-                    {connected ? 'Manage' : 'Connect'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </Box>
-          );
-        })}
+        {PLATFORMS.map((platform) => (
+          <PlatformCard
+            key={platform.key}
+            label={platform.label}
+            initial={platform.initial}
+            color={platform.color}
+            bg={platform.bg}
+            connected={Boolean(integrations[platform.key])}
+            onNavigate={() => navigate(platform.route)}
+          />
+        ))}
       </Box>
     </Box>
   );
