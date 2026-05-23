@@ -1,14 +1,14 @@
 name = "TrackFlow"
 client_id = "b1827c4442d5fe2149de87f16ece59b3"
 # Replace application_url and redirect_urls with APP_URL from .env
-application_url = "https://trackflow.dmytro-kovalenko.ca"
+application_url = "https://secretariat-each-weighted-arthur.trycloudflare.com"
 embedded = true
 
 [access_scopes]
 scopes = "read_pixels,write_pixels,read_customer_events"
 
 [auth]
-redirect_urls = ["https://trackflow.dmytro-kovalenko.ca/authenticate"]
+redirect_urls = ["https://guarantee-physics-every-arms.trycloudflare.com/authenticate", "https://trackflow.dmytro-kovalenko.ca/authenticate"]
 
 [webhooks]
 api_version = "2024-04"
