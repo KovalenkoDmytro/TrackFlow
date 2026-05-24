@@ -34,7 +34,7 @@ export function HomePage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           TrackFlow
         </Typography>
-        <Button variant="outlined" size="small" onClick={() => navigate('/analytics')}>
+        <Button variant="contained" size="small" onClick={() => navigate('/analytics')}>
           Analytics
         </Button>
       </Box>

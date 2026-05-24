@@ -35,12 +35,12 @@ export function PlatformCard({ label, initial, color, bg, connected, onNavigate,
             />
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'raw', gap: 1, alignItems: 'flex-end' }}>
+            {
+                connected && <Button variant="contained" size="small" onClick={onViewEvents}>Events</Button>
+            }
           <Button variant="outlined" size="small" onClick={onNavigate}>
             {connected ? 'Manage' : 'Connect'}
-          </Button>
-          <Button variant="outlined" size="small" onClick={onViewEvents}>
-            Events
           </Button>
         </Box>
       </CardContent>
