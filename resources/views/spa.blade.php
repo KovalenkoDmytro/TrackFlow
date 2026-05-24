@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrackFlow</title>
     @viteReactRefresh
-    @vite(['resources/js/main.jsx'])
+    @vite(['resources/js/main.tsx'])
 </head>
 <body>
     <div id="root"></div>
