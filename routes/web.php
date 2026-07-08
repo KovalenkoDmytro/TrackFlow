@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Middleware\DevShopAuth;
 use Illuminate\Support\Facades\Route;
 
+
 if (app()->isLocal()) {
     // In local development bypass Shopify OAuth entirely so the React app can
     // be worked on with plain `php artisan serve` + `npm run dev`.
@@ -26,3 +27,7 @@ if (app()->isLocal()) {
         Route::get('/analytics', fn () => view('spa'));
     });
 }
+
+Route::any('/webhook/customers-data-request', static function() { return response('OK', 200); });
+Route::any('/webhook/customers-redact', static function() { return response('OK', 200); });
+Route::any('/webhook/shop-redact', static function() { return response('OK', 200); });

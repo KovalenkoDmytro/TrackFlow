@@ -1,16 +1,21 @@
-name = "TrackFlow"
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
 client_id = "b1827c4442d5fe2149de87f16ece59b3"
 application_url = "https://trackflow.dmytro-kovalenko.ca"
 embedded = true
+name = "TrackFlow"
 
 [access_scopes]
-scopes = "read_pixels,write_pixels,read_customer_events"
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customer_events,read_pixels,write_pixels"
 
 [auth]
-redirect_urls = ["https://trackflow.dmytro-kovalenko.ca/authenticate"]
+redirect_urls = [ "https://trackflow.dmytro-kovalenko.ca/authenticate" ]
 
 [webhooks]
 api_version = "2024-04"
 
-[[extensions]]
-path = "extensions/web-pixel"
+[webhooks.privacy_compliance]
+customer_data_request_url = "https://trackflow.dmytro-kovalenko.ca/webhook/customers-data-request"
+customer_redaction_url = "https://trackflow.dmytro-kovalenko.ca/webhook/customers-redact"
+shop_redaction_url = "https://trackflow.dmytro-kovalenko.ca/webhook/shop-redact"
