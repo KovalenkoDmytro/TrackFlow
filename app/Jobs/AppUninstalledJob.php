@@ -37,6 +37,6 @@ final class AppUninstalledJob implements ShouldQueue
         $shop->uninstalled_at = now();
         $shop->save();
 
-        $shop->delete();
+        $shop->forceDelete();
     }
 }

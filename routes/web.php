@@ -2,9 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Actions\Webhooks\CustomersDataRequestWebhook;
+use App\Actions\Webhooks\CustomersRedactWebhook;
+use App\Actions\Webhooks\ShopRedactWebhook;
 use App\Http\Middleware\DevShopAuth;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
+use Osiset\ShopifyApp\Http\Controllers\WebhookController;
 
 if (app()->isLocal()) {
     // In local development bypass Shopify OAuth entirely so the React app can
@@ -28,6 +32,18 @@ if (app()->isLocal()) {
     });
 }
 
-Route::any('/webhook/customers-data-request', static function() { return response('OK', 200); });
-Route::any('/webhook/customers-redact', static function() { return response('OK', 200); });
-Route::any('/webhook/shop-redact', static function() { return response('OK', 200); });
+Route::post('/webhook/customers-data-request', CustomersDataRequestWebhook::class)->middleware('auth.webhook');
+Route::post('/webhook/customers-redact', CustomersRedactWebhook::class)->middleware('auth.webhook');
+Route::post('/webhook/shop-redact', ShopRedactWebhook::class)->middleware('auth.webhook');
+
+// SHOPIFY_MANUAL_ROUTES includes "webhook" so the kyon147/laravel-shopify
+// package no longer registers its catch-all POST /webhook/{type} route
+// (which would otherwise intercept the three explicit routes above and try
+// to dispatch nonexistent App\Jobs\{Type}Job classes). The package still
+// subscribes to the APP_UNINSTALLED topic at /webhook/app-uninstalled (see
+// config/shopify-app.php `webhooks`) and expects it to reach the same
+// WebhookController, which resolves App\Jobs\AppUninstalledJob for that
+// type — so it must be registered explicitly here to keep working.
+Route::post('/webhook/app-uninstalled', function (Request $request) {
+    return (new WebhookController)->handle('app-uninstalled', $request);
+})->middleware('auth.webhook');
