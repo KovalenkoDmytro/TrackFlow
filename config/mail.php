@@ -115,4 +115,18 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ops Alert Recipient
+    |--------------------------------------------------------------------------
+    |
+    | Fallback destination for operational alerts (e.g. `shopify:detect-orphaned-shops`)
+    | that must reach a human even without a dedicated log-aggregation/alerting
+    | stack (Slack webhook, PagerDuty, etc.) configured. Leave empty to disable
+    | email alerts and rely on log output only.
+    |
+    */
+
+    'ops_alert_email' => env('OPS_ALERT_EMAIL'),
+
 ];
