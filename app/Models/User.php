@@ -47,6 +47,7 @@ class User extends Authenticatable implements IShopModel
             'installed_at' => 'datetime',
             'uninstalled_at' => 'datetime',
             'pixel_enabled' => 'boolean',
+            'orphaned_at' => 'datetime',
         ];
     }
 
