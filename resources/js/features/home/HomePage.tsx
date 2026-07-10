@@ -42,7 +42,10 @@ export function HomePage() {
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
         Pixel Status
       </Typography>
-      <PixelStatusCard pixelId={data?.shop?.shopify_pixel_id} />
+      <PixelStatusCard
+        pixelEnabled={Boolean(data?.shop?.pixel_enabled)}
+        pixelId={data?.shop?.shopify_pixel_id}
+      />
 
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
         Platform Integrations

@@ -2,11 +2,17 @@
 
 export interface ShopRecord {
   shopify_pixel_id: string | null;
+  pixel_enabled: boolean;
 }
 
 export interface ShopStatusResponse {
   shop: ShopRecord;
   integrations: Record<string, boolean>;
+}
+
+export interface TogglePixelResponse {
+  pixel_enabled: boolean;
+  shopify_pixel_id: string | null;
 }
 
 export type AnalyticsMode = 'single_day' | 'range';

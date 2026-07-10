@@ -31,6 +31,7 @@ final class ShopStatusController extends Controller
             'shop' => [
                 'name' => $shop->name,
                 'shopify_pixel_id' => $shop->shopify_pixel_id,
+                'pixel_enabled' => (bool) $shop->pixel_enabled,
             ],
             'integrations' => $integrations,
         ]);
