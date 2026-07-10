@@ -67,7 +67,7 @@ return [
     |
     */
 
-    'manual_routes' => env('SHOPIFY_MANUAL_ROUTES', 'home'),
+    'manual_routes' => env('SHOPIFY_MANUAL_ROUTES', 'home,webhook'),
 
     /*
     |--------------------------------------------------------------------------
@@ -238,6 +238,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Auto-migrate legacy offline tokens
+    |--------------------------------------------------------------------------
+    |
+    | When true (and expiring_offline_tokens is enabled), shops with a legacy
+    | non-expiring offline token are migrated to expiring tokens on-the-fly
+    | before the first API call via apiHelper(). Failures are logged and the
+    | request continues with the legacy token. Disable to require explicit
+    | migration via the Artisan command or MigrateShopToExpiringOfflineAccessToken.
+    |
+    */
+
+    'auto_migrate_legacy' => (bool) env('SHOPIFY_AUTO_MIGRATE_LEGACY', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Offline access token refresh skew (seconds)
     |--------------------------------------------------------------------------
     |
@@ -246,6 +261,20 @@ return [
     */
 
     'offline_access_token_refresh_skew_seconds' => (int) env('SHOPIFY_OFFLINE_ACCESS_TOKEN_REFRESH_SKEW', 60),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Refresh offline token before each API call
+    |--------------------------------------------------------------------------
+    |
+    | When true, each shop->api() / apiHelper() call checks whether the offline
+    | access token is within the refresh skew window. If so, the cached API
+    | client is discarded and rebuilt with a fresh token. Useful for long-running
+    | queue jobs that reuse the same shop model instance across token expiry.
+    |
+    */
+
+    'refresh_offline_token_before_api_call' => (bool) env('SHOPIFY_REFRESH_OFFLINE_TOKEN_BEFORE_API_CALL', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -268,7 +297,7 @@ return [
     |
     */
 
-    'api_time_store' => env('SHOPIFY_API_TIME_STORE', Memory::class),
+    'api_time_store' => env('SHOPIFY_API_TIME_STORE', \Gnikyt\BasicShopifyAPI\Store\Memory::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -280,7 +309,7 @@ return [
     |
     */
 
-    'api_limit_store' => env('SHOPIFY_API_LIMIT_STORE', Memory::class),
+    'api_limit_store' => env('SHOPIFY_API_LIMIT_STORE', \Gnikyt\BasicShopifyAPI\Store\Memory::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -292,7 +321,7 @@ return [
     |
     */
 
-    'api_deferrer' => env('SHOPIFY_API_DEFERRER', Sleep::class),
+    'api_deferrer' => env('SHOPIFY_API_DEFERRER', \Gnikyt\BasicShopifyAPI\Deferrers\Sleep::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -360,6 +389,7 @@ return [
     */
 
     'billing_redirect' => env('SHOPIFY_BILLING_REDIRECT', '/billing/process'),
+
 
     /*
     |--------------------------------------------------------------------------
@@ -433,7 +463,7 @@ return [
     */
 
     'scripttags' => [
-    /*
+        /*
             [
                 'src' => env('SHOPIFY_SCRIPTTAG_1_SRC', 'https://example.com/some-controller/js-method-response'),
                 'event' => env('SHOPIFY_SCRIPTTAG_1_EVENT', 'onload'),
@@ -459,7 +489,7 @@ return [
      * @see
      */
     'after_authenticate_job' => [
-    /*
+        /*
             [
                 'job' => env('AFTER_AUTHENTICATE_JOB'), // example: \App\Jobs\AfterAuthorizeJob::class
                 'inline' => env('AFTER_AUTHENTICATE_JOB_INLINE', false) // False = dispatch job for later, true = dispatch immediately
@@ -527,12 +557,12 @@ return [
         /*
         * The fully qualified class name of the Charge model.
         */
-        'charge' => Charge::class,
+        'charge' => Osiset\ShopifyApp\Storage\Models\Charge::class,
 
         /*
         * The fully qualified class name of the Plan model.
         */
-        'plan' => Plan::class,
+        'plan' => Osiset\ShopifyApp\Storage\Models\Plan::class,
     ],
 
     'table_names' => [
@@ -581,7 +611,7 @@ return [
          * Available levels: FULL, PARTIAL, UNSUPPORTED.
          */
         'unacceptable_levels' => [
-            ThemeSupportLevel::UNSUPPORTED,
+            Osiset\ShopifyApp\Objects\Enums\ThemeSupportLevel::UNSUPPORTED,
         ],
     ],
 
@@ -619,5 +649,5 @@ return [
     */
     'forbidden_web_middleware_groups' => [
         'api',
-    ],
+    ]
 ];
