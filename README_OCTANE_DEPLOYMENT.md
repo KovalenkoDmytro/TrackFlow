@@ -40,9 +40,19 @@ git push origin main
 ```bash
 ssh malma@trackflow.dmytro-kovalenko.ca
 cd /home/malma/trackflow
-git pull origin main
-php /usr/bin/php8.4 composer install --no-dev --optimize-autoloader
+git pull origin dev-dmytro
+composer install --no-dev --optimize-autoloader
 ```
+
+> **Gotcha (learned the hard way):** never write `php /usr/bin/php8.4 ...` — that runs `php`
+> with `/usr/bin/php8.4` as the *script argument*, i.e. PHP tries to parse the compiled
+> `php8.4` binary as source code (`PHP Parse error: unexpected character 0x00 ...`). Call
+> the binary directly: `/usr/bin/php8.4 artisan ...`. `composer` is its own executable on
+> `$PATH` (`/usr/local/bin/composer` — confirm with `which composer`) — invoke it bare,
+> never as an argument to `php8.4`.
+>
+> Also: there is **no `main` branch on the remote** — the server tracks `dev-dmytro`. Use
+> `git pull origin dev-dmytro`, not `git pull origin main`.
 
 ### Step 3: Follow DEPLOYMENT_CHECKLIST.md
 
@@ -118,19 +128,22 @@ sudo tail -f /home/malma/trackflow/storage/logs/octane.log
 sudo tail -f /home/malma/trackflow/storage/logs/queue.log
 
 # Monitor queue depth
-php /usr/bin/php8.4 /home/malma/trackflow/artisan queue:monitor
+/usr/bin/php8.4 /home/malma/trackflow/artisan queue:monitor
 ```
 
 ### Deployments (With Zero Downtime)
 
 ```bash
 cd /home/malma/trackflow
-git pull origin main
-php /usr/bin/php8.4 composer install --no-dev --optimize-autoloader
-php /usr/bin/php8.4 artisan migrate --force
-php /usr/bin/php8.4 artisan optimize:clear
+git pull origin dev-dmytro
+composer install --no-dev --optimize-autoloader
+npm install && npm run build
+/usr/bin/php8.4 artisan migrate --force
+/usr/bin/php8.4 artisan optimize:clear
 sudo supervisorctl restart trackflow-octane:* trackflow-queue:*
 ```
+
+(`npm install && npm run build` is required whenever `resources/js/` changed — frontend is React/TS via Vite, built assets are served from `public/` by nginx.)
 
 ### Scaling Queue Workers
 
@@ -187,7 +200,7 @@ return [
 sudo tail -100 /var/log/supervisor/supervisord.log
 
 # Try running manually to see the error
-sudo -u www-data php /usr/bin/php8.4 /home/malma/trackflow/artisan octane:start --server=frankenphp
+sudo -u www-data /usr/bin/php8.4 /home/malma/trackflow/artisan octane:start --server=frankenphp
 ```
 
 ### nginx returns 502 Bad Gateway
@@ -206,7 +219,7 @@ sudo supervisorctl status trackflow-queue:*
 tail -50 /home/malma/trackflow/storage/logs/laravel.log
 
 # Check failed jobs
-php /usr/bin/php8.4 /home/malma/trackflow/artisan queue:failed
+/usr/bin/php8.4 /home/malma/trackflow/artisan queue:failed
 ```
 
 ### Out of memory errors
