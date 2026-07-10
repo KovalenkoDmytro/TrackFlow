@@ -84,6 +84,8 @@ class SyncWebPixel
 
         $response = $shop->api()->graph($mutation, ['id' => $shop->shopify_pixel_id]);
 
+        $this->assertNoGraphErrors($response, $shop);
+
         $errors = $response['body']['data']['webPixelDelete']['userErrors'] ?? [];
 
         if (! empty($errors)) {
@@ -130,6 +132,8 @@ class SyncWebPixel
         GQL;
 
         $response = $shop->api()->graph($mutation, ['input' => ['settings' => $settings]]);
+
+        $this->assertNoGraphErrors($response, $shop);
 
         $errors = $response['body']['data']['webPixelCreate']['userErrors'] ?? [];
 
@@ -185,6 +189,8 @@ class SyncWebPixel
 
         $response = $shop->api()->graph($query);
 
+        $this->assertNoGraphErrors($response, $shop);
+
         $pixelId = $response['body']['data']['webPixel']['id'] ?? null;
 
         if ($pixelId === null) {
@@ -217,6 +223,8 @@ class SyncWebPixel
             'webPixel' => ['settings' => $settings],
         ]);
 
+        $this->assertNoGraphErrors($response, $shop);
+
         $errors = $response['body']['data']['webPixelUpdate']['userErrors'] ?? [];
 
         if (! empty($errors)) {
@@ -227,5 +235,43 @@ class SyncWebPixel
 
             throw new RuntimeException('Failed to update the Shopify Web Pixel.');
         }
+    }
+
+    /**
+     * Guard against top-level GraphQL errors (e.g. `ACCESS_DENIED` due to a
+     * missing scope, throttling, or an invalid query). The
+     * `gnikyt/basic-shopify-api` client puts these in the root `errors` key
+     * of the response — separate from the nested `userErrors` returned by
+     * a mutation payload. When Shopify rejects the operation itself, `data`
+     * is `null` and there is no `userErrors` to inspect, so this check must
+     * run before any nested-error handling.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    private function assertNoGraphErrors(array $response, User $shop): void
+    {
+        $errors = $response['errors'] ?? false;
+
+        if (empty($errors)) {
+            return;
+        }
+
+        $errorsArray = json_decode(json_encode($errors), true);
+
+        $message = collect($errorsArray)
+            ->pluck('message')
+            ->filter()
+            ->implode('; ');
+
+        if ($message === '') {
+            $message = is_string($errors) ? $errors : json_encode($errors);
+        }
+
+        Log::error('SyncWebPixel: GraphQL top-level errors', [
+            'shop' => $shop->name,
+            'errors' => $errors,
+        ]);
+
+        throw new RuntimeException('Shopify GraphQL error: '.$message);
     }
 }
