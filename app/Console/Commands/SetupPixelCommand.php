@@ -99,6 +99,7 @@ final class SetupPixelCommand extends Command
 
             if ($pixelId !== null) {
                 $shop->shopify_pixel_id = $pixelId;
+                $shop->pixel_enabled = true;
                 $shop->save();
                 $this->info("  Pixel created: {$pixelId}");
             } else {
@@ -131,6 +132,7 @@ final class SetupPixelCommand extends Command
 
             if ($pixelId !== null) {
                 $shop->shopify_pixel_id = $pixelId;
+                $shop->pixel_enabled = true;
                 $shop->save();
                 $this->info("  Saved existing pixel ID: {$pixelId}");
             } else {

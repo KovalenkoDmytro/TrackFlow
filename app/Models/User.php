@@ -26,6 +26,7 @@ class User extends Authenticatable implements IShopModel
         'password',
         'tracking_secret',
         'shopify_pixel_id',
+        'pixel_enabled',
         'plan',
         'installed_at',
         'uninstalled_at',
@@ -45,6 +46,7 @@ class User extends Authenticatable implements IShopModel
             'email_verified_at' => 'datetime',
             'installed_at' => 'datetime',
             'uninstalled_at' => 'datetime',
+            'pixel_enabled' => 'boolean',
         ];
     }
 
