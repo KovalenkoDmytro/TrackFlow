@@ -246,6 +246,17 @@ class SyncWebPixel
      * is `null` and there is no `userErrors` to inspect, so this check must
      * run before any nested-error handling.
      *
+     * The client also distinguishes between two failure modes:
+     * - A successful HTTP request (2xx) carrying GraphQL errors in the body
+     *   → `handleSuccess()` sets `errors` to the array of `{message, ...}`.
+     * - A failed HTTP request (non-2xx, e.g. throttling/429 or a 5xx) →
+     *   `handleFailure()` sets `errors` to the literal boolean `true` and
+     *   puts the HTTP status in `status` and any decoded error body in
+     *   `body` (which is *not* the usual `['data' => ...]` shape in this
+     *   case). That case must be handled separately before the array-based
+     *   pluck/implode logic below, otherwise the boolean `true` gets
+     *   stringified into a useless "Shopify GraphQL error: true" message.
+     *
      * @param  array<string, mixed>  $response
      */
     private function assertNoGraphErrors(array $response, User $shop): void
@@ -256,9 +267,18 @@ class SyncWebPixel
             return;
         }
 
-        $errorsArray = json_decode(json_encode($errors), true);
+        if ($errors === true) {
+            Log::error('SyncWebPixel: GraphQL request failed at HTTP level', [
+                'shop' => $shop->name,
+                'response' => $response,
+            ]);
 
-        $message = collect($errorsArray)
+            throw new RuntimeException(
+                'Shopify API request failed (HTTP error, possibly rate limiting) — please try again in a moment.'
+            );
+        }
+
+        $message = collect($errors)
             ->pluck('message')
             ->filter()
             ->implode('; ');

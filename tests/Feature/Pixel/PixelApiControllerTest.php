@@ -264,6 +264,42 @@ describe('PUT /api/pixel', function (): void {
         expect($fresh->shopify_pixel_id)->toBe('gid://shopify/WebPixel/123');
     });
 
+    it('returns 422 with a readable message (not "true") when the HTTP request itself fails (e.g. throttling/5xx)', function (): void {
+        // Mirrors gnikyt/basic-shopify-api's Graph::handleFailure() shape for a
+        // non-2xx HTTP response (429 throttling, 5xx, etc.): `errors` is the
+        // literal boolean `true`, not an array of {message, ...}, and any
+        // decoded error details (if present) live directly in `body`.
+        $apiMock = Mockery::mock(BasicShopifyAPI::class);
+        $apiMock->shouldReceive('graph')
+            ->once()
+            ->withArgs(fn (string $query) => str_contains($query, 'webPixelCreate'))
+            ->andReturn([
+                'errors' => true,
+                'response' => null,
+                'status' => 429,
+                'body' => null,
+                'exception' => null,
+                'timestamps' => [],
+            ]);
+
+        $shop = shopWithFakeApi([
+            'pixel_enabled' => false,
+            'shopify_pixel_id' => null,
+            'tracking_secret' => 'super-secret',
+        ], $apiMock);
+
+        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+
+        $response->assertStatus(422);
+        $response->assertJsonStructure(['message']);
+        expect($response->json('message'))->not->toContain('true');
+        expect($response->json('message'))->toContain('rate limiting');
+
+        $fresh = User::query()->find($shop->getKey());
+        expect($fresh->pixel_enabled)->toBeFalse();
+        expect($fresh->shopify_pixel_id)->toBeNull();
+    });
+
     it('returns 422 when the enabled field is missing', function (): void {
         $shop = User::factory()->create();
 
