@@ -88,7 +88,7 @@ class SyncWebPixel
 
         $errors = $response['body']['data']['webPixelDelete']['userErrors'] ?? [];
 
-        if (! empty($errors)) {
+        if (count($errors) > 0) {
             $errorsArray = json_decode(json_encode($errors), true);
             $alreadyGone = collect($errorsArray)->contains(
                 fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'not found')
@@ -137,7 +137,7 @@ class SyncWebPixel
 
         $errors = $response['body']['data']['webPixelCreate']['userErrors'] ?? [];
 
-        if (! empty($errors)) {
+        if (count($errors) > 0) {
             $errorsArray = json_decode(json_encode($errors), true);
             $alreadyExists = collect($errorsArray)->contains(
                 fn (array $e) => str_contains(strtolower($e['message'] ?? ''), 'already exists')
@@ -227,7 +227,7 @@ class SyncWebPixel
 
         $errors = $response['body']['data']['webPixelUpdate']['userErrors'] ?? [];
 
-        if (! empty($errors)) {
+        if (count($errors) > 0) {
             Log::error('SyncWebPixel: webPixelUpdate userErrors', [
                 'shop' => $shop->name,
                 'errors' => $errors,
