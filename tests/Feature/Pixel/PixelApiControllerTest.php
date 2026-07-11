@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Gnikyt\BasicShopifyAPI\BasicShopifyAPI;
+use Gnikyt\BasicShopifyAPI\ResponseAccess;
 
 /**
  * Mocks the Shopify Admin GraphQL client on a real User (shop) instance.
@@ -298,6 +299,163 @@ describe('PUT /api/pixel', function (): void {
         $fresh = User::query()->find($shop->getKey());
         expect($fresh->pixel_enabled)->toBeFalse();
         expect($fresh->shopify_pixel_id)->toBeNull();
+    });
+
+    /**
+     * Regression tests for a bug where `userErrors` empty-array checks used
+     * `empty()`/`!empty()` on the response. In production, the `body` key of
+     * the Shopify GraphQL response is a `Gnikyt\BasicShopifyAPI\ResponseAccess`
+     * object rather than a plain PHP array. Because `ResponseAccess::offsetGet`
+     * wraps any array value (including an empty one) in a new `ResponseAccess`
+     * instance, `userErrors` is *always* an object in real responses — even
+     * when it's empty. `empty($object)` is always `false` for a non-null
+     * object regardless of its contents, so the old code treated a genuinely
+     * empty `userErrors` as if real errors were present and threw. These tests
+     * replicate the real `ResponseAccess` wrapping (unlike the plain-array
+     * mocks above) to guard against that false positive.
+     */
+    describe('userErrors as ResponseAccess object (real Shopify client shape)', function (): void {
+        it('enables the pixel via webPixelCreate when userErrors is an empty ResponseAccess object', function (): void {
+            $apiMock = Mockery::mock(BasicShopifyAPI::class);
+            $apiMock->shouldReceive('graph')
+                ->once()
+                ->withArgs(fn (string $query) => str_contains($query, 'webPixelCreate'))
+                ->andReturn([
+                    'errors' => false,
+                    'body' => new ResponseAccess([
+                        'data' => [
+                            'webPixelCreate' => [
+                                'webPixel' => ['id' => 'gid://shopify/WebPixel/123'],
+                                'userErrors' => [],
+                            ],
+                        ],
+                    ]),
+                ]);
+
+            $shop = shopWithFakeApi([
+                'pixel_enabled' => false,
+                'shopify_pixel_id' => null,
+                'tracking_secret' => 'super-secret',
+            ], $apiMock);
+
+            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+
+            $response->assertOk();
+            $response->assertJson([
+                'pixel_enabled' => true,
+                'shopify_pixel_id' => 'gid://shopify/WebPixel/123',
+            ]);
+
+            $fresh = User::query()->find($shop->getKey());
+            expect($fresh->pixel_enabled)->toBeTrue();
+            expect($fresh->shopify_pixel_id)->toBe('gid://shopify/WebPixel/123');
+        });
+
+        it('enables the pixel via webPixelUpdate when userErrors is an empty ResponseAccess object', function (): void {
+            $apiMock = Mockery::mock(BasicShopifyAPI::class);
+            $apiMock->shouldReceive('graph')
+                ->once()
+                ->withArgs(fn (string $query) => str_contains($query, 'webPixelUpdate'))
+                ->andReturn([
+                    'errors' => false,
+                    'body' => new ResponseAccess([
+                        'data' => [
+                            'webPixelUpdate' => [
+                                'webPixel' => ['id' => 'gid://shopify/WebPixel/123'],
+                                'userErrors' => [],
+                            ],
+                        ],
+                    ]),
+                ]);
+
+            $shop = shopWithFakeApi([
+                'pixel_enabled' => false,
+                'shopify_pixel_id' => 'gid://shopify/WebPixel/123',
+                'tracking_secret' => 'super-secret',
+            ], $apiMock);
+
+            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+
+            $response->assertOk();
+            $response->assertJson([
+                'pixel_enabled' => true,
+                'shopify_pixel_id' => 'gid://shopify/WebPixel/123',
+            ]);
+
+            $fresh = User::query()->find($shop->getKey());
+            expect($fresh->pixel_enabled)->toBeTrue();
+        });
+
+        it('disables the pixel via webPixelDelete when userErrors is an empty ResponseAccess object', function (): void {
+            $apiMock = Mockery::mock(BasicShopifyAPI::class);
+            $apiMock->shouldReceive('graph')
+                ->once()
+                ->withArgs(fn (string $query) => str_contains($query, 'webPixelDelete'))
+                ->andReturn([
+                    'errors' => false,
+                    'body' => new ResponseAccess([
+                        'data' => [
+                            'webPixelDelete' => [
+                                'deletedWebPixelId' => 'gid://shopify/WebPixel/123',
+                                'userErrors' => [],
+                            ],
+                        ],
+                    ]),
+                ]);
+
+            $shop = shopWithFakeApi([
+                'pixel_enabled' => true,
+                'shopify_pixel_id' => 'gid://shopify/WebPixel/123',
+                'tracking_secret' => 'super-secret',
+            ], $apiMock);
+
+            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => false]);
+
+            $response->assertOk();
+            $response->assertJson([
+                'pixel_enabled' => false,
+                'shopify_pixel_id' => null,
+            ]);
+
+            $fresh = User::query()->find($shop->getKey());
+            expect($fresh->pixel_enabled)->toBeFalse();
+            expect($fresh->shopify_pixel_id)->toBeNull();
+        });
+
+        it('still fails when userErrors is a non-empty ResponseAccess object', function (): void {
+            $apiMock = Mockery::mock(BasicShopifyAPI::class);
+            $apiMock->shouldReceive('graph')
+                ->once()
+                ->withArgs(fn (string $query) => str_contains($query, 'webPixelCreate'))
+                ->andReturn([
+                    'errors' => false,
+                    'body' => new ResponseAccess([
+                        'data' => [
+                            'webPixelCreate' => [
+                                'webPixel' => null,
+                                'userErrors' => [
+                                    ['field' => ['settings'], 'message' => 'Something went wrong.'],
+                                ],
+                            ],
+                        ],
+                    ]),
+                ]);
+
+            $shop = shopWithFakeApi([
+                'pixel_enabled' => false,
+                'shopify_pixel_id' => null,
+                'tracking_secret' => 'super-secret',
+            ], $apiMock);
+
+            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+
+            $response->assertStatus(422);
+            $response->assertJsonStructure(['message']);
+
+            $fresh = User::query()->find($shop->getKey());
+            expect($fresh->pixel_enabled)->toBeFalse();
+            expect($fresh->shopify_pixel_id)->toBeNull();
+        });
     });
 
     it('returns 422 when the enabled field is missing', function (): void {
