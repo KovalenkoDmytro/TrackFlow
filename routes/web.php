@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Actions\Shopify\AuthenticateShopify;
 use App\Actions\Webhooks\CustomersDataRequestWebhook;
 use App\Actions\Webhooks\CustomersRedactWebhook;
 use App\Actions\Webhooks\ShopRedactWebhook;
@@ -9,6 +10,20 @@ use App\Http\Middleware\DevShopAuth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Osiset\ShopifyApp\Http\Controllers\WebhookController;
+
+// App\Providers\AppServiceProvider::excludeAuthenticateFromVendorRoutes()
+// force-adds "authenticate" to shopify-app.manual_routes during the
+// register() phase (before ShopifyAppProvider::boot() decides which of its
+// own routes to register), so the kyon147/laravel-shopify package never
+// registers its own AuthController@authenticate route here — regardless of
+// what SHOPIFY_MANUAL_ROUTES is set to in .env. See
+// App\Actions\Shopify\AuthenticateShopify for why this Action exists:
+// Shopify's managed installation flow never sends a `code`, so the package's
+// legacy OAuth-authorize fallback 500s on every fresh install. This Action
+// bridges Shopify's token-exchange flow instead, then delegates back to the
+// package's own install/auth logic once an `id_token` is present.
+Route::match(['GET', 'POST'], '/authenticate', AuthenticateShopify::class)
+    ->name('authenticate');
 
 if (app()->isLocal()) {
     // In local development bypass Shopify OAuth entirely so the React app can
