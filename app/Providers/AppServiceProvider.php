@@ -6,8 +6,10 @@ namespace App\Providers;
 
 use App\Actions\Shopify\AuthenticateShopify;
 use App\Contracts\PlatformResolverContract;
+use App\Models\User;
 use App\Services\PlatformResolver;
 use App\Services\Shopify\LoggingApiHelper;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
@@ -49,6 +51,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IApiHelper::class, LoggingApiHelper::class);
 
         $this->guardAgainstUnsupportedShopifyRouteConfig();
+
+        // Restricts /operator/google/* (connect/disconnect the single shared
+        // Google OAuth account used for GA4 Data API reporting) to a small
+        // allowlist of operator emails defined in APP_OPERATOR_EMAILS — see
+        // config/services.php "operators" and App\Actions\Google.
+        Gate::define('connect-google', fn (User $user): bool => in_array(
+            $user->email,
+            config('services.operators', []),
+            true,
+        ));
     }
 
     /**

@@ -47,7 +47,11 @@ export function AnalyticsPage() {
     <Button variant="text" size="small" href="/analytics">
       All Events
     </Button>
-  ) : undefined;
+  ) : (
+    <Button variant="text" size="small" href="/analytics/ga4-report">
+      GA4 Report
+    </Button>
+  );
 
   return (
     <PageLayout title={title} maxWidth={800} backTo="/" actions={actions}>
