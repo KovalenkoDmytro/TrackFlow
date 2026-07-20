@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Osiset\ShopifyApp\Contracts\ShopModel as IShopModel;
@@ -75,5 +76,11 @@ class User extends Authenticatable implements IShopModel
     public function platformDeliveries(): HasManyThrough
     {
         return $this->hasManyThrough(PlatformDelivery::class, PlatformIntegration::class);
+    }
+
+    /** @return HasOne<ShopGa4Setting, $this> */
+    public function ga4Setting(): HasOne
+    {
+        return $this->hasOne(ShopGa4Setting::class);
     }
 }
