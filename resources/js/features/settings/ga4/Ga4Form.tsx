@@ -193,14 +193,20 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
               {...form.register('oauth_client_secret')}
               label="OAuth Client Secret"
               type="password"
-              helperText={form.formState.errors.oauth_client_secret?.message}
+              helperText={
+                form.formState.errors.oauth_client_secret?.message ??
+                'From the same Google Cloud Console OAuth Client as above'
+              }
               error={!!form.formState.errors.oauth_client_secret}
               fullWidth
             />
             <TextField
               {...form.register('oauth_refresh_token')}
               label="OAuth Refresh Token"
-              helperText={form.formState.errors.oauth_refresh_token?.message}
+              helperText={
+                form.formState.errors.oauth_refresh_token?.message ??
+                'From Google OAuth Playground: use your own credentials above, authorize with the analytics.readonly + analytics.edit scopes, then exchange for tokens'
+              }
               error={!!form.formState.errors.oauth_refresh_token}
               fullWidth
               multiline
