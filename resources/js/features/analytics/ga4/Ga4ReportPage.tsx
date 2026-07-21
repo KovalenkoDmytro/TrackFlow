@@ -9,6 +9,8 @@ import {
   Button,
   Card,
   CardContent,
+  Link,
+  Paper,
   Table,
   TableBody,
   TableCell,
@@ -45,6 +47,71 @@ function daysAgoString(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function Ga4SetupInstructions() {
+  return (
+    <Card variant="outlined" sx={{ mb: 3 }}>
+      <CardContent>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          How to connect your GA4 property
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1.5 }}>
+          TrackFlow reads your reporting data through a single Google account that our team
+          manages — you don&apos;t need to sign in with Google or set up your own OAuth connection.
+          Just follow the steps below.
+        </Typography>
+
+        <Box component="ol" sx={{ pl: 2.5, m: 0 }}>
+          <Box component="li" sx={{ mb: 1.5 }}>
+            <Typography variant="body2">
+              <strong>Find your GA4 Property ID.</strong> Go to{' '}
+              <Link href="https://analytics.google.com" target="_blank" rel="noopener">
+                Google Analytics
+              </Link>{' '}
+              → Admin (gear icon) → make sure the correct GA4 property is selected → Property
+              Settings → copy the <strong>Property ID</strong> (a plain number, e.g.{' '}
+              <code>123456789</code>). This is different from the Measurement ID (
+              <code>G-XXXXXXXXXX</code>), which you don&apos;t need here.
+            </Typography>
+          </Box>
+          <Box component="li" sx={{ mb: 1.5 }}>
+            <Typography variant="body2">
+              <strong>Grant access to TrackFlow&apos;s connected Google account.</strong> In
+              Google Analytics: Admin → Property Access Management → click the{' '}
+              <strong>+</strong> button → Add users → enter TrackFlow&apos;s connected Google
+              account email with the <strong>Viewer</strong> role → Add. Contact TrackFlow
+              support if you need the email address of our connected Google account.
+            </Typography>
+          </Box>
+          <Box component="li">
+            <Typography variant="body2">
+              <strong>Enter your Property ID below</strong> and save — TrackFlow will verify
+              access automatically.
+            </Typography>
+          </Box>
+        </Box>
+
+        <Paper variant="outlined" sx={{ mt: 2, p: 1.5, borderColor: 'divider' }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+            Troubleshooting
+          </Typography>
+          <Typography variant="caption" color="text.secondary" component="div">
+            &quot;This GA4 property could not be verified&quot; means either the Property ID is
+            wrong or the shared account hasn&apos;t been granted Viewer access yet (see step 2
+            above). &quot;GA4 reporting is busy refreshing credentials&quot; is transient — just
+            try again in a moment.
+          </Typography>
+        </Paper>
+
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Note: this Property ID is separate from the Measurement ID and API Secret configured
+          on the GA4 settings page — those are used to send conversion events, while this one is
+          only used to display reports here.
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
 interface Ga4PropertySetupFormProps {
   saveMutation: ReturnType<typeof useShopGa4Property>['saveMutation'];
 }
@@ -77,6 +144,8 @@ function Ga4PropertySetupForm({ saveMutation }: Ga4PropertySetupFormProps) {
         No GA4 property is configured for this shop yet. Enter your GA4 Property ID below to start
         seeing reporting data here.
       </Alert>
+
+      <Ga4SetupInstructions />
 
       {apiError && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => saveMutation.reset()}>
