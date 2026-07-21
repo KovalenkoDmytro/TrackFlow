@@ -35,28 +35,4 @@ return [
         ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Google (per-shop OAuth for GA4 Admin API Key Event creation)
-    |--------------------------------------------------------------------------
-    |
-    | The app has ONE OAuth client (registered in Google Cloud Console), but
-    | every shop connects ITS OWN Google account through it via
-    | App\Actions\Google\StartShopGoogleOAuth. The resulting refresh_token is
-    | stored per-shop in that shop's own PlatformIntegration credentials
-    | (oauth_refresh_token) — there is no shared/global Google account. This
-    | is unrelated to the GA4 Measurement Protocol credentials (measurement_id
-    | + api_secret) used by App\Services\GoogleAnalytics4Client to send events.
-    |
-    */
-    'google' => [
-        'client_id' => env('GOOGLE_CLIENT_ID'),
-        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_OAUTH_REDIRECT'),
-        'scopes' => [
-            'https://www.googleapis.com/auth/analytics.readonly',
-            'https://www.googleapis.com/auth/analytics.edit',
-        ],
-    ],
-
 ];

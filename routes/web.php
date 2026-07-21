@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Actions\Google\HandleShopGoogleOAuthCallback;
-use App\Actions\Google\StartShopGoogleOAuth;
 use App\Actions\Shopify\AuthenticateShopify;
 use App\Actions\Webhooks\CustomersDataRequestWebhook;
 use App\Actions\Webhooks\CustomersRedactWebhook;
@@ -26,23 +24,6 @@ use Osiset\ShopifyApp\Http\Controllers\WebhookController;
 // package's own install/auth logic once an `id_token` is present.
 Route::match(['GET', 'POST'], '/authenticate', AuthenticateShopify::class)
     ->name('authenticate');
-
-// Connects the AUTHENTICATED SHOP's own Google account for GA4 Admin API Key
-// Event creation (see App\Services\GoogleAnalytics4Client). Every shop
-// connects its own account through the app's single OAuth client — the
-// resulting refresh_token is stored on that shop's own PlatformIntegration
-// row, never shared. Deliberately kept OUTSIDE the `verify.shopify` group
-// below — a top-level redirect away to accounts.google.com breaks Shopify's
-// embedded iframe session, so this only needs a plain `auth:web` session.
-// MUST be registered before the `/settings/{any}` catch-all below (Laravel
-// matches routes in registration order), otherwise the SPA catch-all would
-// swallow these requests first.
-Route::middleware(['auth:web'])
-    ->prefix('settings/ga4/google')
-    ->group(function (): void {
-        Route::get('/start', StartShopGoogleOAuth::class)->name('settings.ga4.google.start');
-        Route::get('/callback', HandleShopGoogleOAuthCallback::class)->name('settings.ga4.google.callback');
-    });
 
 if (app()->isLocal()) {
     // In local development bypass Shopify OAuth entirely so the React app can
