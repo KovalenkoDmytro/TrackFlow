@@ -93,23 +93,18 @@ export interface Ga4Credentials {
   measurement_id: string;
   api_secret: string;
   property_id: string;
-  oauth_client_id: string;
-  oauth_client_secret: string;
-  oauth_refresh_token: string;
 }
 
 export interface Ga4SettingsResponse {
   connected: boolean;
   credentials: Ga4Credentials | null;
+  has_oauth_connection: boolean;
 }
 
 export interface Ga4FormData {
   measurement_id: string;
   api_secret: string;
   property_id: string;
-  oauth_client_id: string;
-  oauth_client_secret: string;
-  oauth_refresh_token: string;
 }
 
 export class ValidationError extends Error {
