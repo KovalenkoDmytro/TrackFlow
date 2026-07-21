@@ -131,7 +131,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * Create a single conversion action on Google Ads and return its resource name.
      *
      * The action is created with UPLOAD_CLICKS type and
-     * GOOGLE_SEARCH_ATTRIBUTION_LAST_CLICK attribution model. The name is prefixed
+     * GOOGLE_ADS_LAST_CLICK attribution model. The name is prefixed
      * with "TF - " to identify TrackFlow-managed actions in the Google Ads UI.
      *
      * @param  array<string, mixed>  $credentials  Decrypted credentials (same shape as testCredentials).
@@ -155,7 +155,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
                         'category' => $category,
                         'status' => 'ENABLED',
                         'attribution_model_settings' => [
-                            'attribution_model' => 'GOOGLE_SEARCH_ATTRIBUTION_LAST_CLICK',
+                            'attribution_model' => 'GOOGLE_ADS_LAST_CLICK',
                         ],
                     ],
                 ],
