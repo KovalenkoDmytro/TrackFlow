@@ -127,7 +127,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
               {...form.register('customer_id')}
               label="Customer ID"
               placeholder="123-456-7890"
-              helperText={form.formState.errors.customer_id?.message ?? 'Your Google Ads account ID (not MCC)'}
+              helperText={
+                form.formState.errors.customer_id?.message ??
+                'Your Google Ads account ID (not MCC) — shown top-right in Google Ads, format 123-456-7890'
+              }
               error={!!form.formState.errors.customer_id}
               fullWidth
               required
@@ -136,14 +139,20 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
               {...form.register('mcc_id')}
               label="MCC Customer ID (optional)"
               placeholder="123-456-7890"
-              helperText={form.formState.errors.mcc_id?.message ?? "Leave blank if you don't use a manager account"}
+              helperText={
+                form.formState.errors.mcc_id?.message ??
+                "Leave blank if you don't use a manager account. If you do, this is your MCC's account ID, found the same way as Customer ID but for the manager account"
+              }
               error={!!form.formState.errors.mcc_id}
               fullWidth
             />
             <TextField
               {...form.register('developer_token')}
               label="Developer Token"
-              helperText={form.formState.errors.developer_token?.message}
+              helperText={
+                form.formState.errors.developer_token?.message ??
+                'From Google Ads → Tools & Settings → Setup → API Center'
+              }
               error={!!form.formState.errors.developer_token}
               fullWidth
               required
@@ -151,7 +160,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
             <TextField
               {...form.register('oauth_client_id')}
               label="OAuth Client ID"
-              helperText={form.formState.errors.oauth_client_id?.message}
+              helperText={
+                form.formState.errors.oauth_client_id?.message ??
+                'From Google Cloud Console → APIs & Services → Credentials'
+              }
               error={!!form.formState.errors.oauth_client_id}
               fullWidth
               required
@@ -160,7 +172,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
               {...form.register('oauth_client_secret')}
               label="OAuth Client Secret"
               type="password"
-              helperText={form.formState.errors.oauth_client_secret?.message}
+              helperText={
+                form.formState.errors.oauth_client_secret?.message ??
+                'From the same Google Cloud Console OAuth Client as above'
+              }
               error={!!form.formState.errors.oauth_client_secret}
               fullWidth
               required
@@ -168,7 +183,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
             <TextField
               {...form.register('oauth_refresh_token')}
               label="OAuth Refresh Token"
-              helperText={form.formState.errors.oauth_refresh_token?.message}
+              helperText={
+                form.formState.errors.oauth_refresh_token?.message ??
+                'From Google OAuth Playground: use your own credentials above, authorize with the https://www.googleapis.com/auth/adwords scope, then exchange for tokens'
+              }
               error={!!form.formState.errors.oauth_refresh_token}
               fullWidth
               required
