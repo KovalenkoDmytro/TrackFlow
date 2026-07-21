@@ -26,10 +26,10 @@ import type { GoogleAdsFormData } from '../../../types/api';
 const schema = z.object({
   customer_id: z.string().min(1, 'Required'),
   mcc_id: z.string(),
-  developer_token: z.string().min(1, 'Required'),
-  oauth_client_id: z.string().min(1, 'Required'),
-  oauth_client_secret: z.string().min(1, 'Required'),
-  oauth_refresh_token: z.string().min(1, 'Required'),
+  developer_token: z.string(),
+  oauth_client_id: z.string(),
+  oauth_client_secret: z.string(),
+  oauth_refresh_token: z.string(),
 });
 
 const EMPTY_FORM: GoogleAdsFormData = {
@@ -66,13 +66,21 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
       form.reset({
         customer_id: creds.customer_id ?? '',
         mcc_id: creds.mcc_id ?? '',
-        developer_token: creds.developer_token ?? '',
-        oauth_client_id: creds.oauth?.client_id ?? '',
-        oauth_client_secret: creds.oauth?.client_secret ?? '',
-        oauth_refresh_token: creds.oauth?.refresh_token ?? '',
+        // Developer token and OAuth secrets are write-only — the API never returns
+        // the stored value, so these always start empty.
+        developer_token: '',
+        oauth_client_id: '',
+        oauth_client_secret: '',
+        oauth_refresh_token: '',
       });
     }
   }, [query.data, form]);
+
+  const credentials = query.data?.credentials;
+  const hasDeveloperToken = credentials?.has_developer_token ?? false;
+  const hasOauthClientId = credentials?.has_oauth_client_id ?? false;
+  const hasOauthClientSecret = credentials?.has_oauth_client_secret ?? false;
+  const hasOauthRefreshToken = credentials?.has_oauth_refresh_token ?? false;
 
   async function onSubmit(data: GoogleAdsFormData) {
     setSuccessMessage(null);
@@ -148,48 +156,75 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
             />
             <TextField
               {...form.register('developer_token')}
-              label="Developer Token"
+              type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  Developer Token
+                  {hasDeveloperToken && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.developer_token?.message ??
-                'From Google Ads → Tools & Settings → Setup → API Center'
+                (hasDeveloperToken
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From Google Ads → Tools & Settings → Setup → API Center')
               }
               error={!!form.formState.errors.developer_token}
               fullWidth
-              required
             />
             <TextField
               {...form.register('oauth_client_id')}
-              label="OAuth Client ID"
+              type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Client ID
+                  {hasOauthClientId && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_client_id?.message ??
-                'From Google Cloud Console → APIs & Services → Credentials'
+                (hasOauthClientId
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From Google Cloud Console → APIs & Services → Credentials')
               }
               error={!!form.formState.errors.oauth_client_id}
               fullWidth
-              required
             />
             <TextField
               {...form.register('oauth_client_secret')}
-              label="OAuth Client Secret"
               type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Client Secret
+                  {hasOauthClientSecret && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_client_secret?.message ??
-                'From the same Google Cloud Console OAuth Client as above'
+                (hasOauthClientSecret
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From the same Google Cloud Console OAuth Client as above')
               }
               error={!!form.formState.errors.oauth_client_secret}
               fullWidth
-              required
             />
             <TextField
               {...form.register('oauth_refresh_token')}
-              label="OAuth Refresh Token"
+              type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Refresh Token
+                  {hasOauthRefreshToken && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_refresh_token?.message ??
-                'From Google OAuth Playground: use your own credentials above, authorize with the https://www.googleapis.com/auth/adwords scope, then exchange for tokens'
+                (hasOauthRefreshToken
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From Google OAuth Playground: use your own credentials above, authorize with the https://www.googleapis.com/auth/adwords scope, then exchange for tokens')
               }
               error={!!form.formState.errors.oauth_refresh_token}
               fullWidth
-              required
               multiline
               rows={3}
               slotProps={{ htmlInput: { style: { fontFamily: 'monospace' } } }}

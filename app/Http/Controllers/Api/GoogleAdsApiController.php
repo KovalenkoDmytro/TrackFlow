@@ -53,12 +53,17 @@ final class GoogleAdsApiController extends Controller
         $credentials = [
             'customer_id' => $raw['customer_id'] ?? '',
             'mcc_id' => $raw['mcc_id'] ?? '',
-            'developer_token' => $raw['developer_token'] ?? '',
+            // Developer token and OAuth secrets are write-only: never echo the stored value back to the browser.
+            'developer_token' => '',
             'oauth' => [
-                'client_id' => $raw['oauth']['client_id'] ?? '',
-                'client_secret' => $raw['oauth']['client_secret'] ?? '',
-                'refresh_token' => $raw['oauth']['refresh_token'] ?? '',
+                'client_id' => '',
+                'client_secret' => '',
+                'refresh_token' => '',
             ],
+            'has_developer_token' => ! empty($raw['developer_token'] ?? null),
+            'has_oauth_client_id' => ! empty($raw['oauth']['client_id'] ?? null),
+            'has_oauth_client_secret' => ! empty($raw['oauth']['client_secret'] ?? null),
+            'has_oauth_refresh_token' => ! empty($raw['oauth']['refresh_token'] ?? null),
         ];
 
         return response()->json([
@@ -90,26 +95,46 @@ final class GoogleAdsApiController extends Controller
     {
         $validated = $request->validate([
             'customer_id' => ['required', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
-            'developer_token' => ['required', 'string', 'min:10'],
+            'developer_token' => ['nullable', 'string'],
             'mcc_id' => ['nullable', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
-            'oauth_client_id' => ['required', 'string'],
-            'oauth_client_secret' => ['required', 'string'],
-            'oauth_refresh_token' => ['required', 'string'],
+            'oauth_client_id' => ['nullable', 'string'],
+            'oauth_client_secret' => ['nullable', 'string'],
+            'oauth_refresh_token' => ['nullable', 'string'],
         ]);
 
         $shop = $request->user();
 
+        $existing = $shop->platformIntegrations()
+            ->where('platform', Platform::GoogleAds)
+            ->first();
+
+        $existingRaw = $existing?->credentials !== null
+            ? json_decode($existing->credentials, true)
+            : [];
+        $existingOauth = $existingRaw['oauth'] ?? [];
+
         $customerId = str_replace('-', '', $validated['customer_id']);
         $mccId = ! empty($validated['mcc_id']) ? str_replace('-', '', $validated['mcc_id']) : null;
 
+        $developerToken = self::resolveSensitiveField($validated['developer_token'] ?? null, $existingRaw['developer_token'] ?? null);
+        $clientId = self::resolveSensitiveField($validated['oauth_client_id'] ?? null, $existingOauth['client_id'] ?? null);
+        $clientSecret = self::resolveSensitiveField($validated['oauth_client_secret'] ?? null, $existingOauth['client_secret'] ?? null);
+        $refreshToken = self::resolveSensitiveField($validated['oauth_refresh_token'] ?? null, $existingOauth['refresh_token'] ?? null);
+
+        if ($existing === null && ($developerToken === '' || $clientId === '' || $clientSecret === '' || $refreshToken === '')) {
+            return response()->json([
+                'error' => 'Developer Token, OAuth Client ID, Client Secret, and Refresh Token are all required to connect Google Ads for the first time.',
+            ], 422);
+        }
+
         $credentials = [
             'customer_id' => $customerId,
-            'developer_token' => $validated['developer_token'],
+            'developer_token' => $developerToken,
             'mcc_id' => $mccId,
             'oauth' => [
-                'client_id' => $validated['oauth_client_id'],
-                'client_secret' => $validated['oauth_client_secret'],
-                'refresh_token' => $validated['oauth_refresh_token'],
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'refresh_token' => $refreshToken,
             ],
         ];
 
@@ -159,5 +184,18 @@ final class GoogleAdsApiController extends Controller
             ->update(['active' => false]);
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Resolve a write-only credential field: use the newly submitted value when
+     * provided (non-blank), otherwise fall back to the value already stored for
+     * this integration so resaving the form without retyping secrets does not
+     * wipe them.
+     */
+    private static function resolveSensitiveField(?string $submitted, ?string $existing): string
+    {
+        $trimmed = trim((string) $submitted);
+
+        return $trimmed !== '' ? $trimmed : trim((string) $existing);
     }
 }

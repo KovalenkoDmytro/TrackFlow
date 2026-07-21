@@ -45,6 +45,9 @@ final class Ga4ApiController extends Controller
                     'oauth_client_id' => '',
                     'oauth_client_secret' => '',
                     'oauth_refresh_token' => '',
+                    'has_oauth_client_id' => false,
+                    'has_oauth_client_secret' => false,
+                    'has_oauth_refresh_token' => false,
                 ],
             ]);
         }
@@ -59,9 +62,13 @@ final class Ga4ApiController extends Controller
                 'measurement_id' => $raw['measurement_id'] ?? '',
                 'api_secret' => $raw['api_secret'] ?? '',
                 'property_id' => $raw['property_id'] ?? '',
-                'oauth_client_id' => $raw['oauth']['client_id'] ?? '',
-                'oauth_client_secret' => $raw['oauth']['client_secret'] ?? '',
-                'oauth_refresh_token' => $raw['oauth']['refresh_token'] ?? '',
+                // OAuth secrets are write-only: never echo the stored value back to the browser.
+                'oauth_client_id' => '',
+                'oauth_client_secret' => '',
+                'oauth_refresh_token' => '',
+                'has_oauth_client_id' => ! empty($raw['oauth']['client_id'] ?? null),
+                'has_oauth_client_secret' => ! empty($raw['oauth']['client_secret'] ?? null),
+                'has_oauth_refresh_token' => ! empty($raw['oauth']['refresh_token'] ?? null),
             ],
         ]);
     }
@@ -85,6 +92,16 @@ final class Ga4ApiController extends Controller
             'oauth_refresh_token' => ['nullable', 'string'],
         ]);
 
+        $shop = $request->user();
+
+        $existing = $shop->platformIntegrations()
+            ->where('platform', Platform::GoogleAnalytics4)
+            ->first();
+
+        $existingRaw = $existing?->credentials !== null
+            ? json_decode($existing->credentials, true)
+            : [];
+
         $credentials = [
             'measurement_id' => trim($validated['measurement_id']),
             'api_secret' => trim($validated['api_secret']),
@@ -92,10 +109,23 @@ final class Ga4ApiController extends Controller
 
         if (! empty($validated['property_id'])) {
             $credentials['property_id'] = trim($validated['property_id']);
+
+            $existingOauth = $existingRaw['oauth'] ?? [];
+
+            $clientId = self::resolveSensitiveField($validated['oauth_client_id'] ?? null, $existingOauth['client_id'] ?? null);
+            $clientSecret = self::resolveSensitiveField($validated['oauth_client_secret'] ?? null, $existingOauth['client_secret'] ?? null);
+            $refreshToken = self::resolveSensitiveField($validated['oauth_refresh_token'] ?? null, $existingOauth['refresh_token'] ?? null);
+
+            if ($existing === null && ($clientId === '' || $clientSecret === '' || $refreshToken === '')) {
+                return response()->json([
+                    'message' => 'OAuth Client ID, Client Secret, and Refresh Token are required together with Property ID to auto-create GA4 Key Events on first connect.',
+                ], 422);
+            }
+
             $credentials['oauth'] = [
-                'client_id' => trim($validated['oauth_client_id'] ?? ''),
-                'client_secret' => trim($validated['oauth_client_secret'] ?? ''),
-                'refresh_token' => trim($validated['oauth_refresh_token'] ?? ''),
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'refresh_token' => $refreshToken,
             ];
         }
 
@@ -106,8 +136,6 @@ final class Ga4ApiController extends Controller
                 'message' => 'Could not connect to GA4: '.$e->getMessage(),
             ], 422);
         }
-
-        $shop = $request->user();
 
         $integration = PlatformIntegration::query()->updateOrCreate(
             [
@@ -141,5 +169,18 @@ final class Ga4ApiController extends Controller
             ->update(['active' => false]);
 
         return response()->json(['message' => 'Disconnected successfully']);
+    }
+
+    /**
+     * Resolve a write-only credential field: use the newly submitted value when
+     * provided (non-blank), otherwise fall back to the value already stored for
+     * this integration so resaving the form without retyping secrets does not
+     * wipe them.
+     */
+    private static function resolveSensitiveField(?string $submitted, ?string $existing): string
+    {
+        $trimmed = trim((string) $submitted);
+
+        return $trimmed !== '' ? $trimmed : trim((string) $existing);
     }
 }

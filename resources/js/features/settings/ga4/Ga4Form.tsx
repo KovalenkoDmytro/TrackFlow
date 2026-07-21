@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, TextField, Typography } from '@mui/material';
 import { DisabledApiPanel } from './components/DisabledApiPanel';
 import { ScopeErrorPanel } from './components/ScopeErrorPanel';
 import { useGa4Settings } from './hooks/useGa4Settings';
@@ -76,12 +76,19 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
         measurement_id: creds?.measurement_id ?? '',
         api_secret: creds?.api_secret ?? '',
         property_id: creds?.property_id || draft.property_id || '',
-        oauth_client_id: creds?.oauth_client_id || draft.oauth_client_id || '',
-        oauth_client_secret: creds?.oauth_client_secret || draft.oauth_client_secret || '',
-        oauth_refresh_token: creds?.oauth_refresh_token || draft.oauth_refresh_token || '',
+        // OAuth secrets are write-only — the API never returns the stored value,
+        // so these always start empty (a local unsaved draft may still prefill them).
+        oauth_client_id: draft.oauth_client_id || '',
+        oauth_client_secret: draft.oauth_client_secret || '',
+        oauth_refresh_token: draft.oauth_refresh_token || '',
       });
     }
   }, [query.data, form]);
+
+  const credentials = query.data?.credentials;
+  const hasOauthClientId = credentials?.has_oauth_client_id ?? false;
+  const hasOauthClientSecret = credentials?.has_oauth_client_secret ?? false;
+  const hasOauthRefreshToken = credentials?.has_oauth_refresh_token ?? false;
 
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
@@ -181,31 +188,54 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
             />
             <TextField
               {...form.register('oauth_client_id')}
-              label="OAuth Client ID"
+              type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Client ID
+                  {hasOauthClientId && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_client_id?.message ??
-                'From Google Cloud Console → APIs & Services → Credentials'
+                (hasOauthClientId
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From Google Cloud Console → APIs & Services → Credentials')
               }
               error={!!form.formState.errors.oauth_client_id}
               fullWidth
             />
             <TextField
               {...form.register('oauth_client_secret')}
-              label="OAuth Client Secret"
               type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Client Secret
+                  {hasOauthClientSecret && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_client_secret?.message ??
-                'From the same Google Cloud Console OAuth Client as above'
+                (hasOauthClientSecret
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From the same Google Cloud Console OAuth Client as above')
               }
               error={!!form.formState.errors.oauth_client_secret}
               fullWidth
             />
             <TextField
               {...form.register('oauth_refresh_token')}
-              label="OAuth Refresh Token"
+              type="password"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  OAuth Refresh Token
+                  {hasOauthRefreshToken && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
+                </Box>
+              }
               helperText={
                 form.formState.errors.oauth_refresh_token?.message ??
-                'From Google OAuth Playground: use your own credentials above, authorize with the analytics.readonly + analytics.edit scopes, then exchange for tokens'
+                (hasOauthRefreshToken
+                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
+                  : 'From Google OAuth Playground: use your own credentials above, authorize with the analytics.readonly + analytics.edit scopes, then exchange for tokens')
               }
               error={!!form.formState.errors.oauth_refresh_token}
               fullWidth
