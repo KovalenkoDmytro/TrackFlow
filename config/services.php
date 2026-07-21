@@ -35,30 +35,4 @@ return [
         ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Google (shared operator OAuth for GA4 Data API reporting)
-    |--------------------------------------------------------------------------
-    |
-    | A single Google account is connected once by an operator (see
-    | App\Actions\Google and the "connect-google" Gate below) and its refresh
-    | token is shared by the whole app to call the GA4 Data/Admin APIs on
-    | behalf of every shop's own GA4 property. This is unrelated to the
-    | per-shop GA4 Measurement Protocol credentials (measurement_id +
-    | api_secret) used by App\Services\GoogleAnalytics4Client for sending
-    | events.
-    |
-    */
-    'google' => [
-        'client_id' => env('GOOGLE_CLIENT_ID'),
-        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_OAUTH_REDIRECT'),
-        'scopes' => [
-            'https://www.googleapis.com/auth/analytics.readonly',
-            'https://www.googleapis.com/auth/analytics.edit',
-        ],
-    ],
-
-    'operators' => array_values(array_filter(array_map('trim', explode(',', (string) env('APP_OPERATOR_EMAILS', ''))))),
-
 ];

@@ -93,6 +93,9 @@ export interface Ga4Credentials {
   measurement_id: string;
   api_secret: string;
   property_id: string;
+  oauth_client_id: string;
+  oauth_client_secret: string;
+  oauth_refresh_token: string;
 }
 
 export interface Ga4SettingsResponse {
@@ -104,46 +107,9 @@ export interface Ga4FormData {
   measurement_id: string;
   api_secret: string;
   property_id: string;
-}
-
-// GA4 Data API reporting (read-only) — separate from the Measurement
-// Protocol credentials above. Each shop only assigns its own GA4
-// property_id; the actual Data API calls run through a single shared
-// operator-connected Google account (see App\Services\Ga4TokenProvider).
-export interface ShopGa4Property {
-  property_id: string;
-  property_display_name: string | null;
-  property_timezone: string | null;
-  property_currency: string | null;
-  active: boolean;
-  last_verified_at: string | null;
-}
-
-export interface ShopGa4PropertyResponse {
-  setting: ShopGa4Property | null;
-}
-
-export interface Ga4ReportMetricValue {
-  value: string;
-}
-
-export interface Ga4ReportRow {
-  metricValues?: Ga4ReportMetricValue[];
-}
-
-export interface Ga4ReportData {
-  rows?: Ga4ReportRow[];
-  metricHeaders?: { name: string }[];
-}
-
-export interface Ga4ReportResponse {
-  report: Ga4ReportData;
-}
-
-export interface GoogleOperatorStatusResponse {
-  connected: boolean;
-  connected_at: string | null;
-  is_operator: boolean;
+  oauth_client_id: string;
+  oauth_client_secret: string;
+  oauth_refresh_token: string;
 }
 
 export class ValidationError extends Error {

@@ -10,7 +10,6 @@ const PLATFORMS = [
   { key: 'meta',       label: 'Meta',        initial: 'M', color: '#1877F2', bg: '#e7f3ff', route: '/settings/meta' },
   { key: 'tiktok',     label: 'TikTok',      initial: 'T', color: '#ffffff', bg: '#010101', route: '/settings/tiktok' },
   { key: 'ga4',        label: 'GA4',          initial: 'A', color: '#E37400', bg: '#fff3e0', route: '/settings/ga4' },
-  { key: 'google_account', label: 'Google Account', initial: 'G', color: '#34A853', bg: '#e6f4ea', route: '/settings/google-account' },
 ] as const;
 
 export function HomePage() {

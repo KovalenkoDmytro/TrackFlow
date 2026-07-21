@@ -6,7 +6,6 @@ import type {
   GoogleAdsSaveResponse,
   Ga4SettingsResponse,
   Ga4FormData,
-  ShopGa4PropertyResponse,
 } from '../types/api';
 import { ValidationError } from '../types/api';
 
@@ -73,28 +72,4 @@ export async function deleteGa4Settings(client: ApiClient): Promise<void> {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to disconnect.');
   }
-}
-
-export async function getShopGa4Property(client: ApiClient): Promise<ShopGa4PropertyResponse> {
-  const res = await client('/api/settings/ga4-property');
-  if (!res.ok) throw new Error('Failed to load GA4 property settings');
-  return res.json() as Promise<ShopGa4PropertyResponse>;
-}
-
-export async function saveShopGa4Property(
-  client: ApiClient,
-  propertyId: string,
-): Promise<ShopGa4PropertyResponse> {
-  const res = await client('/api/settings/ga4-property', {
-    method: 'PUT',
-    body: JSON.stringify({ property_id: propertyId }),
-  });
-  const body = await res.json() as ShopGa4PropertyResponse | { errors?: Record<string, string[]>; message?: string };
-  if (res.status === 422 && 'errors' in body && body['errors']) {
-    throw new ValidationError(body['errors']);
-  }
-  if (!res.ok) {
-    throw new Error(('message' in body ? body['message'] : undefined) ?? 'Failed to save GA4 property.');
-  }
-  return body as ShopGa4PropertyResponse;
 }
