@@ -14,13 +14,10 @@ use Illuminate\Support\Facades\Log;
 /**
  * GA4 Measurement Protocol client implementing the ConversionPlatformContract.
  *
- * GA4 uses the Measurement Protocol for sending events — no per-shop OAuth,
- * no API library required. Credentials are a measurement_id + api_secret
- * pair, which are passed as query parameters on every request. Optional
- * Admin API calls (property verification, Key Event provisioning) use the
- * single shared operator OAuth token resolved via Ga4TokenProvider instead
- * of per-shop credentials. The class is intentionally final — extension
- * happens through the contract, not inheritance.
+ * GA4 uses the Measurement Protocol — no OAuth, no API library required.
+ * Credentials are a measurement_id + api_secret pair, which are passed as
+ * query parameters on every request. The class is intentionally final —
+ * extension happens through the contract, not inheritance.
  */
 final class GoogleAnalytics4Client implements ConversionPlatformContract
 {
@@ -68,23 +65,16 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
 
     private const string ADMIN_API_BASE = 'https://analyticsadmin.googleapis.com/v1beta';
 
-    public function __construct(
-        private readonly Ga4TokenProvider $tokenProvider,
-    ) {}
-
     /**
      * Verify that the given credentials can reach the Measurement Protocol debug endpoint.
      *
      * Uses GA4's debug endpoint to validate measurement_id + api_secret.
      * The endpoint always returns HTTP 200 — auth failures surface as ERROR-level
-     * validationMessages. When property_id is also supplied, Admin API access is
-     * verified by fetching the property's keyEvents list using the shared
-     * operator token.
+     * validationMessages. When property_id and oauth credentials are also supplied,
+     * Admin API access is verified by fetching the property's keyEvents list.
      *
      * @param  array<string, mixed>  $credentials  Must contain: measurement_id, api_secret.
-     *                                             Optionally: property_id (Admin API keyEvents access
-     *                                             is then verified using the shared operator token
-     *                                             resolved via Ga4TokenProvider).
+     *                                             Optionally: property_id, oauth (client_id, client_secret, refresh_token).
      *
      * @throws \RuntimeException When the API rejects the credentials or validation fails.
      */
@@ -122,8 +112,8 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
             throw new \RuntimeException('GA4 validation failed: '.implode('; ', $descriptions));
         }
 
-        if (! empty($credentials['property_id'])) {
-            $accessToken = $this->tokenProvider->getAccessToken();
+        if (! empty($credentials['property_id']) && ! empty($credentials['oauth'])) {
+            $accessToken = $this->getAccessToken($credentials['oauth']);
 
             $adminResponse = Http::withToken($accessToken)
                 ->get(self::ADMIN_API_BASE.'/properties/'.$credentials['property_id'].'/keyEvents');
@@ -143,20 +133,19 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
      * Always upserts local ConversionActionMapping rows for all GA4_EVENTS so
      * ProcessTrackingEvent can look up the event name at dispatch time.
      *
-     * When property_id is present in the integration's credentials, also
-     * creates Key Events in the GA4 property for all events in
-     * KEY_EVENTS_TO_CREATE (purchase is skipped — it is a GA4 default), using
-     * the shared operator token resolved via Ga4TokenProvider. Admin API
-     * failures are logged but do not throw so the job is not retried.
+     * When property_id and oauth credentials are present in the integration's
+     * credentials, also creates Key Events in the GA4 property for all events
+     * in KEY_EVENTS_TO_CREATE (purchase is skipped — it is a GA4 default).
+     * Admin API failures are logged but do not throw so the job is not retried.
      */
     public function setupConversionActions(PlatformIntegration $integration): void
     {
         /** @var array<string, mixed> $credentials */
         $credentials = json_decode((string) $integration->credentials, true) ?? [];
 
-        if (! empty($credentials['property_id'])) {
+        if (! empty($credentials['property_id']) && ! empty($credentials['oauth'])) {
             try {
-                $accessToken = $this->tokenProvider->getAccessToken();
+                $accessToken = $this->getAccessToken($credentials['oauth']);
                 $existing = $this->fetchExistingKeyEventNames($accessToken, (string) $credentials['property_id']);
 
                 foreach (self::KEY_EVENTS_TO_CREATE as $eventName) {
@@ -266,6 +255,32 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
 
         $errorMessage = $this->extractApiError($response->json(), $response->body());
         throw new \RuntimeException("GA4 Measurement Protocol error [{$status}]: {$errorMessage}");
+    }
+
+    /**
+     * Exchange a refresh token for a short-lived access token via Google's OAuth2 endpoint.
+     *
+     * @param  array<string, string>  $oauth  Must contain: client_id, client_secret, refresh_token.
+     *
+     * @throws \RuntimeException When the token exchange fails.
+     */
+    private function getAccessToken(array $oauth): string
+    {
+        $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+            'client_id' => $oauth['client_id'],
+            'client_secret' => $oauth['client_secret'],
+            'refresh_token' => $oauth['refresh_token'],
+            'grant_type' => 'refresh_token',
+        ]);
+
+        $body = $response->json();
+
+        if (! $response->successful() || empty($body['access_token'])) {
+            $error = is_array($body) ? ($body['error_description'] ?? $body['error'] ?? json_encode($body)) : $response->body();
+            throw new \RuntimeException("GA4 OAuth token exchange failed: {$error}");
+        }
+
+        return (string) $body['access_token'];
     }
 
     /**

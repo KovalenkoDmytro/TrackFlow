@@ -2,9 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Actions\Google\DisconnectGoogleOAuth;
-use App\Actions\Google\HandleGoogleOAuthCallback;
-use App\Actions\Google\StartGoogleOAuth;
 use App\Actions\Shopify\AuthenticateShopify;
 use App\Actions\Webhooks\CustomersDataRequestWebhook;
 use App\Actions\Webhooks\CustomersRedactWebhook;
@@ -49,20 +46,6 @@ if (app()->isLocal()) {
         Route::get('/analytics', fn () => view('spa'));
     });
 }
-
-// Connects/disconnects the single shared Google OAuth account used by GA4
-// Data API reporting (see App\Services\Ga4TokenProvider). Deliberately kept
-// OUTSIDE the `verify.shopify` middleware group above — a top-level redirect
-// away to accounts.google.com breaks Shopify's embedded iframe session, and
-// `can:connect-google` (App\Providers\AppServiceProvider::boot()) is
-// sufficient authorization on its own since it is a plain `auth:web` route.
-Route::middleware(['auth:web', 'can:connect-google'])
-    ->prefix('operator/google')
-    ->group(function (): void {
-        Route::get('/start', StartGoogleOAuth::class)->name('operator.google.start');
-        Route::get('/callback', HandleGoogleOAuthCallback::class)->name('operator.google.callback');
-        Route::post('/disconnect', DisconnectGoogleOAuth::class)->name('operator.google.disconnect');
-    });
 
 Route::post('/webhook/customers-data-request', CustomersDataRequestWebhook::class)->middleware('auth.webhook');
 Route::post('/webhook/customers-redact', CustomersRedactWebhook::class)->middleware('auth.webhook');
