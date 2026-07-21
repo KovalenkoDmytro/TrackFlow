@@ -42,10 +42,8 @@ final class Ga4ApiController extends Controller
                     'measurement_id' => '',
                     'api_secret' => '',
                     'property_id' => '',
-                    'oauth_client_id' => '',
-                    'oauth_client_secret' => '',
-                    'oauth_refresh_token' => '',
                 ],
+                'has_oauth_connection' => false,
             ]);
         }
 
@@ -59,10 +57,9 @@ final class Ga4ApiController extends Controller
                 'measurement_id' => $raw['measurement_id'] ?? '',
                 'api_secret' => $raw['api_secret'] ?? '',
                 'property_id' => $raw['property_id'] ?? '',
-                'oauth_client_id' => $raw['oauth']['client_id'] ?? '',
-                'oauth_client_secret' => $raw['oauth']['client_secret'] ?? '',
-                'oauth_refresh_token' => $raw['oauth']['refresh_token'] ?? '',
             ],
+            // Never expose the refresh_token itself — only whether one is stored.
+            'has_oauth_connection' => ! empty($raw['oauth_refresh_token']),
         ]);
     }
 
@@ -73,6 +70,11 @@ final class Ga4ApiController extends Controller
      * saving so the merchant receives immediate feedback on invalid credentials.
      * Dispatches CreateConversionActions as a background job on success to persist
      * the standard event name mappings.
+     *
+     * `oauth_refresh_token` is never accepted from this request — it is only
+     * ever written by HandleShopGoogleOAuthCallback via the "Connect with
+     * Google" flow. Any refresh_token already stored for this shop is
+     * preserved untouched when this form is submitted.
      */
     public function store(Request $request): JsonResponse
     {
@@ -80,10 +82,17 @@ final class Ga4ApiController extends Controller
             'measurement_id' => ['required', 'string'],
             'api_secret' => ['required', 'string'],
             'property_id' => ['nullable', 'string', 'regex:/^\d+$/'],
-            'oauth_client_id' => ['nullable', 'string'],
-            'oauth_client_secret' => ['nullable', 'string'],
-            'oauth_refresh_token' => ['nullable', 'string'],
         ]);
+
+        $shop = $request->user();
+
+        $existing = $shop->platformIntegrations()
+            ->where('platform', Platform::GoogleAnalytics4)
+            ->first();
+
+        $existingCredentials = $existing?->credentials !== null
+            ? (json_decode((string) $existing->credentials, true) ?? [])
+            : [];
 
         $credentials = [
             'measurement_id' => trim($validated['measurement_id']),
@@ -92,11 +101,10 @@ final class Ga4ApiController extends Controller
 
         if (! empty($validated['property_id'])) {
             $credentials['property_id'] = trim($validated['property_id']);
-            $credentials['oauth'] = [
-                'client_id' => trim($validated['oauth_client_id'] ?? ''),
-                'client_secret' => trim($validated['oauth_client_secret'] ?? ''),
-                'refresh_token' => trim($validated['oauth_refresh_token'] ?? ''),
-            ];
+        }
+
+        if (! empty($existingCredentials['oauth_refresh_token'])) {
+            $credentials['oauth_refresh_token'] = $existingCredentials['oauth_refresh_token'];
         }
 
         try {
@@ -106,8 +114,6 @@ final class Ga4ApiController extends Controller
                 'message' => 'Could not connect to GA4: '.$e->getMessage(),
             ], 422);
         }
-
-        $shop = $request->user();
 
         $integration = PlatformIntegration::query()->updateOrCreate(
             [
