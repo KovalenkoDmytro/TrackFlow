@@ -7,8 +7,8 @@ import { PlatformCard } from './components/PlatformCard';
 
 const PLATFORMS = [
   { key: 'google_ads', label: 'Google Ads', initial: 'G', color: '#4285F4', bg: '#e8f0fe', route: '/settings/google-ads' },
-  { key: 'meta',       label: 'Meta',        initial: 'M', color: '#1877F2', bg: '#e7f3ff', route: '/settings/meta' },
-  { key: 'tiktok',     label: 'TikTok',      initial: 'T', color: '#ffffff', bg: '#010101', route: '/settings/tiktok' },
+  { key: 'meta',       label: 'Meta',        initial: 'M', color: '#1877F2', bg: '#e7f3ff', route: '/settings/meta', comingSoon: true },
+  { key: 'tiktok',     label: 'TikTok',      initial: 'T', color: '#ffffff', bg: '#010101', route: '/settings/tiktok', comingSoon: true },
   { key: 'ga4',        label: 'GA4',          initial: 'A', color: '#E37400', bg: '#fff3e0', route: '/settings/ga4' },
 ] as const;
 
@@ -59,6 +59,7 @@ export function HomePage() {
             color={platform.color}
             bg={platform.bg}
             connected={Boolean(integrations[platform.key])}
+            comingSoon={'comingSoon' in platform && platform.comingSoon}
             onNavigate={() => navigate(platform.route)}
             onViewEvents={() => navigate(`/analytics/platform/${platform.key}`)}
           />
