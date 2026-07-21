@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Box, Button, Card, CardContent, Chip, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, TextField, Typography } from '@mui/material';
 import { DisabledApiPanel } from './components/DisabledApiPanel';
 import { ScopeErrorPanel } from './components/ScopeErrorPanel';
 import { useGa4Settings } from './hooks/useGa4Settings';
@@ -14,16 +14,22 @@ const schema = z.object({
   measurement_id: z.string().min(1, 'Required'),
   api_secret: z.string().min(1, 'Required'),
   property_id: z.string(),
+  oauth_client_id: z.string(),
+  oauth_client_secret: z.string(),
+  oauth_refresh_token: z.string(),
 });
 
 const EMPTY_FORM: Ga4FormData = {
   measurement_id: '',
   api_secret: '',
   property_id: '',
+  oauth_client_id: '',
+  oauth_client_secret: '',
+  oauth_refresh_token: '',
 };
 
 const DRAFT_KEY = 'trackflow_ga4_draft';
-const DRAFT_FIELDS = ['property_id'] as const;
+const DRAFT_FIELDS = ['property_id', 'oauth_client_id', 'oauth_client_secret', 'oauth_refresh_token'] as const;
 type DraftField = (typeof DRAFT_FIELDS)[number];
 
 function loadGa4Draft(): Partial<Pick<Ga4FormData, DraftField>> {
@@ -48,18 +54,6 @@ function isApiDisabledError(message: string): boolean {
   return lower.includes('analyticsadmin') || lower.includes('analytics admin api') || lower.includes('has not been used');
 }
 
-/**
- * Forces a top-level browser navigation instead of a same-frame link.
- *
- * The Shopify embedded app runs inside an iframe; Google's OAuth consent
- * screen refuses to render inside a frame, so the "Connect with Google"
- * button must break out to the top-level window rather than navigating
- * within the iframe.
- */
-function navigateTopLevel(path: string): void {
-  window.top!.location.href = `${window.location.origin}${path}`;
-}
-
 interface Ga4FormProps {
   onDisconnect: () => void;
   isDisconnecting: boolean;
@@ -68,7 +62,6 @@ interface Ga4FormProps {
 export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
   const { query, saveMutation } = useGa4Settings();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [googleStatusMessage, setGoogleStatusMessage] = useState<{ severity: 'success' | 'error'; text: string } | null>(null);
 
   const form = useForm<Ga4FormData>({
     resolver: zodResolver(schema),
@@ -83,6 +76,9 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
         measurement_id: creds?.measurement_id ?? '',
         api_secret: creds?.api_secret ?? '',
         property_id: creds?.property_id || draft.property_id || '',
+        oauth_client_id: creds?.oauth_client_id || draft.oauth_client_id || '',
+        oauth_client_secret: creds?.oauth_client_secret || draft.oauth_client_secret || '',
+        oauth_refresh_token: creds?.oauth_refresh_token || draft.oauth_refresh_token || '',
       });
     }
   }, [query.data, form]);
@@ -92,30 +88,14 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
       if (name && (DRAFT_FIELDS as readonly string[]).includes(name)) {
         saveGa4Draft({
           property_id: value.property_id ?? '',
+          oauth_client_id: value.oauth_client_id ?? '',
+          oauth_client_secret: value.oauth_client_secret ?? '',
+          oauth_refresh_token: value.oauth_refresh_token ?? '',
         });
       }
     });
     return () => subscription.unsubscribe();
   }, [form]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const google = params.get('google');
-    const googleError = params.get('google_error');
-
-    if (google || googleError) {
-      setGoogleStatusMessage(
-        googleError
-          ? { severity: 'error', text: googleError }
-          : { severity: 'success', text: 'Google account connected successfully.' },
-      );
-
-      params.delete('google');
-      params.delete('google_error');
-      const newSearch = params.toString();
-      window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''));
-    }
-  }, []);
 
   async function onSubmit(data: Ga4FormData) {
     setSuccessMessage(null);
@@ -137,19 +117,12 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
     : null;
 
   const isConnected = query.data?.connected ?? false;
-  const hasOauthConnection = query.data?.has_oauth_connection ?? false;
 
   return (
     <>
       {successMessage && (
         <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMessage(null)}>
           {successMessage}
-        </Alert>
-      )}
-
-      {googleStatusMessage && (
-        <Alert severity={googleStatusMessage.severity} sx={{ mb: 3 }} onClose={() => setGoogleStatusMessage(null)}>
-          {googleStatusMessage.text}
         </Alert>
       )}
 
@@ -194,7 +167,7 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
               required
             />
             <Typography variant="body2" color="text.secondary">
-              Optional: connect your Google account to automatically create Key Events in your GA4 property.
+              Optional: provide these to automatically create Key Events in your GA4 property.
             </Typography>
             <TextField
               {...form.register('property_id')}
@@ -206,19 +179,33 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
               error={!!form.formState.errors.property_id}
               fullWidth
             />
-            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigateTopLevel('/settings/ga4/google/start')}
-              >
-                {hasOauthConnection ? 'Reconnect with Google' : 'Connect with Google'}
-              </Button>
-              <Chip
-                label={hasOauthConnection ? 'Connected' : 'Not connected'}
-                color={hasOauthConnection ? 'success' : 'default'}
-                size="small"
-              />
-            </Box>
+            <TextField
+              {...form.register('oauth_client_id')}
+              label="OAuth Client ID"
+              helperText={
+                form.formState.errors.oauth_client_id?.message ??
+                'From Google Cloud Console → APIs & Services → Credentials'
+              }
+              error={!!form.formState.errors.oauth_client_id}
+              fullWidth
+            />
+            <TextField
+              {...form.register('oauth_client_secret')}
+              label="OAuth Client Secret"
+              type="password"
+              helperText={form.formState.errors.oauth_client_secret?.message}
+              error={!!form.formState.errors.oauth_client_secret}
+              fullWidth
+            />
+            <TextField
+              {...form.register('oauth_refresh_token')}
+              label="OAuth Refresh Token"
+              helperText={form.formState.errors.oauth_refresh_token?.message}
+              error={!!form.formState.errors.oauth_refresh_token}
+              fullWidth
+              multiline
+              rows={3}
+            />
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               <Button type="submit" variant="contained" disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? 'Saving…' : 'Save & Connect'}
