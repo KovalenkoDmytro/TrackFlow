@@ -36,7 +36,12 @@ export function GoogleOperatorPage() {
 
             <Box sx={{ display: 'flex', gap: 1 }}>
               {!data.connected ? (
-                <Button variant="contained" href="/operator/google/start">
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    window.top!.location.href = '/operator/google/start';
+                  }}
+                >
                   Connect Google Account
                 </Button>
               ) : (
