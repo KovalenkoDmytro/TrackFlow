@@ -6,14 +6,40 @@ interface PlatformCardProps {
   color: string;
   bg: string;
   connected: boolean;
+  comingSoon?: boolean;
   onNavigate: () => void;
   onViewEvents: () => void;
 }
 
-export function PlatformCard({ label, initial, color, bg, connected, onNavigate, onViewEvents }: PlatformCardProps) {
+export function PlatformCard({ label, initial, color, bg, connected, comingSoon = false, onNavigate, onViewEvents }: PlatformCardProps) {
   return (
-    <Card variant="outlined">
-      <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <Card variant="outlined" sx={{ position: 'relative', overflow: 'hidden' }}>
+      {comingSoon && (
+        <Chip
+          label="Coming soon"
+          color="primary"
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 1,
+            fontWeight: 600,
+          }}
+        />
+      )}
+      <CardContent
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          ...(comingSoon && {
+            filter: 'blur(2px)',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }),
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
             sx={{
