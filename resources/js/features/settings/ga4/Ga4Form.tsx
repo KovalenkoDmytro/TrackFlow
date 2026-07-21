@@ -56,8 +56,8 @@ function isApiDisabledError(message: string): boolean {
  * button must break out to the top-level window rather than navigating
  * within the iframe.
  */
-function navigateTopLevel(url: string): void {
-  window.top!.location.href = url;
+function navigateTopLevel(path: string): void {
+  window.top!.location.href = `${window.location.origin}${path}`;
 }
 
 interface Ga4FormProps {
