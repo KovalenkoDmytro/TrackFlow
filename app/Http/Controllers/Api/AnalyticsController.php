@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Analytics\GetEventCountsForPeriod;
+use App\Actions\Analytics\GetPlatformDeliveryStatsForPeriod;
 use App\Enums\TrackingEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Analytics\AnalyticsFilterRequest;
@@ -24,6 +25,7 @@ final class AnalyticsController extends Controller
 {
     public function __construct(
         private readonly GetEventCountsForPeriod $getEventCounts,
+        private readonly GetPlatformDeliveryStatsForPeriod $getPlatformDeliveryStats,
     ) {}
 
     public function index(AnalyticsFilterRequest $request): JsonResponse
@@ -48,34 +50,61 @@ final class AnalyticsController extends Controller
             ),
         };
 
+        $days = (int) CarbonImmutable::parse($start->toDateString())->diffInDays(CarbonImmutable::parse($end->toDateString())) + 1;
+
+        $period = [
+            'start' => $start->toDateString(),
+            'end' => $end->toDateString(),
+            'label' => $label,
+            'days' => $days,
+        ];
+
+        $filters = [
+            'mode' => $mode,
+            'platform' => $platform,
+            'date' => $mode === 'single_day' ? $start->toDateString() : null,
+            'start_date' => $mode === 'range' ? $start->toDateString() : null,
+            'end_date' => $mode === 'range' ? $end->toDateString() : null,
+        ];
+
+        $meta = [
+            'available_events' => array_map(fn (TrackingEventType $c): string => $c->value, TrackingEventType::cases()),
+            'max_range_days' => 366,
+            'today' => $today->toDateString(),
+        ];
+
+        if ($platform === 'meta') {
+            $deliveryStats = $this->getPlatformDeliveryStats->handle($shop, $start, $end, $platform);
+
+            $totals = [
+                'attempted' => (int) array_sum(array_map(fn (array $s): int => $s['attempted'], $deliveryStats)),
+                'delivered' => (int) array_sum(array_map(fn (array $s): int => $s['delivered'], $deliveryStats)),
+                'failed' => (int) array_sum(array_map(fn (array $s): int => $s['failed'], $deliveryStats)),
+                'pending' => (int) array_sum(array_map(fn (array $s): int => $s['pending'], $deliveryStats)),
+            ];
+
+            return response()->json([
+                'filters' => $filters,
+                'summary' => [
+                    'period' => $period,
+                    'delivery_stats' => $deliveryStats,
+                    'totals' => $totals,
+                ],
+                'meta' => $meta,
+            ]);
+        }
+
         $counts = $this->getEventCounts->handle($shop, $start, $end, $platform);
         $total = (int) array_sum(array_map(fn (array $c): int => $c['count'], $counts));
 
-        $days = (int) CarbonImmutable::parse($start->toDateString())->diffInDays(CarbonImmutable::parse($end->toDateString())) + 1;
-
         return response()->json([
-            'filters' => [
-                'mode' => $mode,
-                'platform' => $platform,
-                'date' => $mode === 'single_day' ? $start->toDateString() : null,
-                'start_date' => $mode === 'range' ? $start->toDateString() : null,
-                'end_date' => $mode === 'range' ? $end->toDateString() : null,
-            ],
+            'filters' => $filters,
             'summary' => [
-                'period' => [
-                    'start' => $start->toDateString(),
-                    'end' => $end->toDateString(),
-                    'label' => $label,
-                    'days' => $days,
-                ],
+                'period' => $period,
                 'counts' => $counts,
                 'total' => $total,
             ],
-            'meta' => [
-                'available_events' => array_map(fn (TrackingEventType $c): string => $c->value, TrackingEventType::cases()),
-                'max_range_days' => 366,
-                'today' => $today->toDateString(),
-            ],
+            'meta' => $meta,
         ]);
     }
 

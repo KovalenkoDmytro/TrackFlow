@@ -1,11 +1,11 @@
 // resources/js/api/analytics.ts
 import type { ApiClient } from './client';
-import type { AnalyticsParams, AnalyticsResponse } from '../types/api';
+import type { AnalyticsParams, AnalyticsResponse, PlatformDeliveryResponse } from '../types/api';
 
 export async function getAnalytics(
   client: ApiClient,
   params: AnalyticsParams,
-): Promise<AnalyticsResponse> {
+): Promise<AnalyticsResponse | PlatformDeliveryResponse> {
   const search = new URLSearchParams();
   search.set('mode', params.mode);
   if (params.mode === 'single_day') {
@@ -24,5 +24,5 @@ export async function getAnalytics(
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to load analytics');
   }
-  return res.json() as Promise<AnalyticsResponse>;
+  return res.json() as Promise<AnalyticsResponse | PlatformDeliveryResponse>;
 }
