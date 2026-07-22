@@ -144,7 +144,7 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
                 form.formState.errors.access_token?.message ??
                 (hasAccessToken
                   ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
-                  : 'Generate a Conversions API access token in Meta Events Manager → Settings → Conversions API → Generate access token')
+                  : 'Events Manager → Datasets → Conversions API → Set up direct integration → Generate access token')
               }
               error={!!form.formState.errors.access_token}
               fullWidth

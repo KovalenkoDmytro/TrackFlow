@@ -55,7 +55,7 @@ final class MetaClient implements ConversionPlatformContract
      *
      * @param  array<string, mixed>  $credentials  Must contain: pixel_id, access_token.
      *
-     * @throws \RuntimeException When the API responds with a non-2xx status.
+     * @throws \RuntimeException With a merchant-actionable message when the API responds with a non-2xx status.
      */
     public function testCredentials(array $credentials): void
     {
@@ -65,10 +65,38 @@ final class MetaClient implements ConversionPlatformContract
         ]);
 
         if (! $response->successful()) {
-            $status = $response->status();
-            $errorMessage = $this->extractApiError($response->json(), $response->body());
-            throw new \RuntimeException("Meta API error [{$status}]: {$errorMessage}");
+            throw new \RuntimeException($this->buildTestCredentialsErrorMessage($response->json(), $response->body()));
         }
+    }
+
+    /**
+     * Build a merchant-facing, actionable error message for a failed testCredentials() call.
+     *
+     * Meta's Graph API error code 100 ("Invalid parameter" / "Missing Permission")
+     * is by far the most common failure here: the access token is valid but lacks
+     * the ads_management/business_management permission for this specific pixel
+     * (e.g. a short-lived Graph Explorer token, or a token generated outside the
+     * pixel's Business Manager). That case gets a specific, actionable message.
+     * Every other error code falls back to a generic message that still surfaces
+     * Meta's raw reason so the merchant (or a developer helping them) can diagnose it.
+     *
+     * @param  array<string, mixed>|null  $responseBody  Decoded JSON response body.
+     * @param  string  $rawBody  Raw response body string, used when the body isn't valid JSON.
+     */
+    private function buildTestCredentialsErrorMessage(?array $responseBody, string $rawBody): string
+    {
+        $error = $responseBody['error'] ?? null;
+        $rawReason = $this->extractApiError($responseBody, $rawBody);
+
+        if (is_array($error) && (int) ($error['code'] ?? 0) === 100) {
+            return 'Meta rejected this access token: it does not have permission to manage this Pixel. '
+                .'Generate a new token with the "ads_management" permission from a System User in Business Settings '
+                .'that has "Manage" access to this Pixel, then try again. '
+                ."(Meta says: {$rawReason})";
+        }
+
+        return "Meta rejected the connection: {$rawReason}. "
+            .'Double-check the Pixel ID and that the access token has not expired.';
     }
 
     /**
