@@ -47,22 +47,52 @@ final class MetaClient implements ConversionPlatformContract
     private const string GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
 
     /**
+     * Distinctive custom event name used to validate credentials without polluting
+     * the merchant's real conversion funnel. Meta will never attribute this name to
+     * a standard e-commerce event or optimisation, so it is safe to send as a real
+     * (non-test-mode) event even without a test_event_code.
+     */
+    private const string CONNECTION_TEST_EVENT_NAME = 'TrackFlowConnectionTest';
+
+    /**
      * Verify that the given credentials can reach the Meta Graph API.
      *
-     * Performs a lightweight read request (fetch pixel id/name). Called before
-     * credentials are persisted so the merchant sees an error immediately rather
-     * than discovering the problem when the first event fires.
+     * Sends a lightweight, non-attributing event to the Conversions API events
+     * endpoint (POST /{pixel_id}/events) rather than reading the pixel via the
+     * Marketing API. Meta's documented flow for generating a Conversions API
+     * token (Events Manager -> Data Sources -> Pixel -> Settings -> Conversions
+     * API -> Generate an Access Token) issues a narrow-scope token
+     * ("read_ads_dataset_quality", granular to that pixel) that cannot read pixel
+     * metadata via GET but can post events — so validation must match the
+     * capability MetaClient actually needs. Called before credentials are
+     * persisted so the merchant sees an error immediately rather than discovering
+     * the problem when the first event fires.
      *
-     * @param  array<string, mixed>  $credentials  Must contain: pixel_id, access_token.
+     * @param  array<string, mixed>  $credentials  Must contain: pixel_id, access_token. Optionally: test_event_code.
      *
      * @throws \RuntimeException With a merchant-actionable message when the API responds with a non-2xx status.
      */
     public function testCredentials(array $credentials): void
     {
-        $response = Http::get(self::GRAPH_API_BASE.'/'.$credentials['pixel_id'], [
-            'fields' => 'id,name',
+        $event = [
+            'event_name' => self::CONNECTION_TEST_EVENT_NAME,
+            'event_time' => now()->getTimestamp(),
+            'action_source' => 'system_generated',
+            'user_data' => [
+                'client_ip_address' => '127.0.0.1',
+                'client_user_agent' => 'TrackFlow-ConnectionTest/1.0',
+            ],
+        ];
+
+        $body = ['data' => [$event]];
+
+        if (! empty($credentials['test_event_code'])) {
+            $body['test_event_code'] = $credentials['test_event_code'];
+        }
+
+        $response = Http::post(self::GRAPH_API_BASE."/{$credentials['pixel_id']}/events?".http_build_query([
             'access_token' => $credentials['access_token'],
-        ]);
+        ]), $body);
 
         if (! $response->successful()) {
             throw new \RuntimeException($this->buildTestCredentialsErrorMessage($response->json(), $response->body()));
@@ -73,12 +103,11 @@ final class MetaClient implements ConversionPlatformContract
      * Build a merchant-facing, actionable error message for a failed testCredentials() call.
      *
      * Meta's Graph API error code 100 ("Invalid parameter" / "Missing Permission")
-     * is by far the most common failure here: the access token is valid but lacks
-     * the ads_management/business_management permission for this specific pixel
-     * (e.g. a short-lived Graph Explorer token, or a token generated outside the
-     * pixel's Business Manager). That case gets a specific, actionable message.
-     * Every other error code falls back to a generic message that still surfaces
-     * Meta's raw reason so the merchant (or a developer helping them) can diagnose it.
+     * here most commonly means the pixel_id is wrong (the token has no access to
+     * that dataset at all) or the token has been generated with genuinely no
+     * Conversions API permission. Every other error code falls back to a generic
+     * message that still surfaces Meta's raw reason so the merchant (or a
+     * developer helping them) can diagnose it.
      *
      * @param  array<string, mixed>|null  $responseBody  Decoded JSON response body.
      * @param  string  $rawBody  Raw response body string, used when the body isn't valid JSON.
@@ -89,9 +118,9 @@ final class MetaClient implements ConversionPlatformContract
         $rawReason = $this->extractApiError($responseBody, $rawBody);
 
         if (is_array($error) && (int) ($error['code'] ?? 0) === 100) {
-            return 'Meta rejected this access token: it does not have permission to manage this Pixel. '
-                .'Generate a new token with the "ads_management" permission from a System User in Business Settings '
-                .'that has "Manage" access to this Pixel, then try again. '
+            return 'Meta rejected this access token: it does not have permission to send events for this Pixel. '
+                .'Double-check the Pixel ID, or generate a new access token from Events Manager -> Data Sources -> '
+                .'Pixel -> Settings -> Conversions API, then try again. '
                 ."(Meta says: {$rawReason})";
         }
 

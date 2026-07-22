@@ -31,18 +31,39 @@ function makeTrackingEventData(array $overrides = []): TrackingEventData
 }
 
 describe('MetaClient::testCredentials', function (): void {
-    it('succeeds when the Graph API responds with 200', function (): void {
+    it('succeeds when the Conversions API events endpoint responds with 200', function (): void {
         Http::fake([
-            'https://graph.facebook.com/*' => Http::response(['id' => '123', 'name' => 'My Pixel'], 200),
+            'https://graph.facebook.com/*' => Http::response(['events_received' => 1], 200),
         ]);
 
         $client = new MetaClient;
 
         $client->testCredentials(['pixel_id' => '123', 'access_token' => 'valid-token']);
 
-        Http::assertSent(fn ($request) => str_contains((string) $request->url(), 'graph.facebook.com/v21.0/123'));
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return $request->method() === 'POST'
+                && str_contains((string) $request->url(), 'graph.facebook.com/v21.0/123/events')
+                && $body['data'][0]['event_name'] === 'TrackFlowConnectionTest'
+                && $body['data'][0]['action_source'] === 'system_generated'
+                && $body['data'][0]['user_data']['client_ip_address'] === '127.0.0.1'
+                && $body['data'][0]['user_data']['client_user_agent'] === 'TrackFlow-ConnectionTest/1.0';
+        });
 
         expect(true)->toBeTrue();
+    });
+
+    it('includes the test_event_code in the request body when present', function (): void {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response(['events_received' => 1], 200),
+        ]);
+
+        $client = new MetaClient;
+
+        $client->testCredentials(['pixel_id' => '123', 'access_token' => 'valid-token', 'test_event_code' => 'TEST123']);
+
+        Http::assertSent(fn ($request) => $request->data()['test_event_code'] === 'TEST123');
     });
 
     it('throws a RuntimeException with the Meta error message on failure', function (): void {
@@ -72,7 +93,7 @@ describe('MetaClient::testCredentials', function (): void {
         $client = new MetaClient;
 
         expect(fn () => $client->testCredentials(['pixel_id' => '123', 'access_token' => 'bad-scope-token']))
-            ->toThrow(RuntimeException::class, 'ads_management');
+            ->toThrow(RuntimeException::class, 'Events Manager');
     });
 });
 
