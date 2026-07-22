@@ -57,6 +57,23 @@ describe('MetaClient::testCredentials', function (): void {
         expect(fn () => $client->testCredentials(['pixel_id' => '123', 'access_token' => 'bad-token']))
             ->toThrow(RuntimeException::class, 'Invalid OAuth access token.');
     });
+
+    it('throws an actionable, merchant-friendly message when Meta returns error code 100 (missing permission)', function (): void {
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'error' => [
+                    'message' => '(#100) Missing Permission',
+                    'type' => 'OAuthException',
+                    'code' => 100,
+                ],
+            ], 400),
+        ]);
+
+        $client = new MetaClient;
+
+        expect(fn () => $client->testCredentials(['pixel_id' => '123', 'access_token' => 'bad-scope-token']))
+            ->toThrow(RuntimeException::class, 'ads_management');
+    });
 });
 
 describe('MetaClient::uploadConversion', function (): void {
