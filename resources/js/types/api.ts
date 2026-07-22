@@ -46,6 +46,33 @@ export interface AnalyticsResponse {
   summary: AnalyticsSummary;
 }
 
+export interface PlatformDeliveryStat {
+  event: string;
+  label: string;
+  attempted: number;
+  delivered: number;
+  failed: number;
+  pending: number;
+  last_error: string | null;
+}
+
+export interface PlatformDeliveryTotals {
+  attempted: number;
+  delivered: number;
+  failed: number;
+  pending: number;
+}
+
+export interface PlatformDeliverySummary {
+  period: AnalyticsPeriod | null;
+  delivery_stats: PlatformDeliveryStat[];
+  totals: PlatformDeliveryTotals;
+}
+
+export interface PlatformDeliveryResponse {
+  summary: PlatformDeliverySummary;
+}
+
 export interface GoogleAdsOAuth {
   client_id: string;
   client_secret: string;

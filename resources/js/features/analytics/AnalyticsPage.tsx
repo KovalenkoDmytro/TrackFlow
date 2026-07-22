@@ -7,8 +7,9 @@ import { ModeToggle } from './components/ModeToggle';
 import { DayNavigator } from './components/DayNavigator';
 import { DateRangePicker } from './components/DateRangePicker';
 import { EventCountsTable } from './components/EventCountsTable';
+import { PlatformDeliveryTable } from './components/PlatformDeliveryTable';
 import { useAnalytics } from './hooks/useAnalytics';
-import type { AnalyticsMode, AnalyticsParams } from '../../types/api';
+import type { AnalyticsMode, AnalyticsParams, AnalyticsResponse, PlatformDeliveryResponse } from '../../types/api';
 
 const PLATFORM_LABELS: Record<string, string> = {
   google_ads: 'Google Ads',
@@ -36,10 +37,16 @@ export function AnalyticsPage() {
       : { mode, start_date: startDate, end_date: endDate, platform };
 
   const { data, isFetching, error } = useAnalytics(params);
+  const isMeta = platform === 'meta';
 
-  const counts = data?.summary?.counts ?? [];
-  const total = data?.summary?.total ?? 0;
+  const eventCountsData = !isMeta ? (data as AnalyticsResponse | undefined) : undefined;
+  const deliveryData = isMeta ? (data as PlatformDeliveryResponse | undefined) : undefined;
+
+  const counts = eventCountsData?.summary?.counts ?? [];
+  const total = eventCountsData?.summary?.total ?? 0;
   const period = data?.summary?.period ?? null;
+  const deliveryStats = deliveryData?.summary?.delivery_stats ?? [];
+  const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0 };
 
   const title = platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
 
@@ -80,7 +87,11 @@ export function AnalyticsPage() {
       </Card>
 
       <Card variant="outlined">
-        <EventCountsTable counts={counts} total={total} loading={isFetching} />
+        {isMeta ? (
+          <PlatformDeliveryTable stats={deliveryStats} totals={deliveryTotals} loading={isFetching} />
+        ) : (
+          <EventCountsTable counts={counts} total={total} loading={isFetching} />
+        )}
       </Card>
     </PageLayout>
   );
