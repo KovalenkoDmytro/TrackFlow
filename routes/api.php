@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\Ga4ApiController;
 use App\Http\Controllers\Api\GoogleAdsApiController;
+use App\Http\Controllers\Api\MetaApiController;
 use App\Http\Controllers\Api\PixelApiController;
 use App\Http\Controllers\Api\ShopStatusController;
 use App\Http\Controllers\ConversionController;
@@ -26,5 +27,9 @@ Route::middleware(['auth:web'])->group(function (): void {
         Route::get('/ga4', [Ga4ApiController::class, 'show']);
         Route::post('/ga4', [Ga4ApiController::class, 'store']);
         Route::delete('/ga4', [Ga4ApiController::class, 'destroy']);
+
+        Route::get('/meta', [MetaApiController::class, 'show']);
+        Route::post('/meta', [MetaApiController::class, 'store']);
+        Route::delete('/meta', [MetaApiController::class, 'destroy']);
     });
 });

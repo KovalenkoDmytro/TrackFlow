@@ -119,6 +119,40 @@ export interface Ga4FormData {
   oauth_refresh_token: string;
 }
 
+export interface MetaCredentials {
+  pixel_id: string;
+  test_event_code: string;
+  access_token: string;
+  has_access_token: boolean;
+}
+
+export interface MetaIntegration {
+  active: boolean;
+}
+
+export interface MetaMapping {
+  id: number;
+  event: string;
+  active: boolean;
+  external_action_id: string | null;
+}
+
+export interface MetaSettingsResponse {
+  integration: MetaIntegration | null;
+  mappings: MetaMapping[];
+  credentials: MetaCredentials | null;
+}
+
+export interface MetaSaveResponse {
+  integration: MetaIntegration | null;
+}
+
+export interface MetaFormData {
+  pixel_id: string;
+  access_token: string;
+  test_event_code: string;
+}
+
 export class ValidationError extends Error {
   constructor(public readonly fieldErrors: Record<string, string[]>) {
     super('Validation failed');

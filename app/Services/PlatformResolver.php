@@ -34,6 +34,7 @@ final class PlatformResolver implements PlatformResolverContract
         return match ($platform) {
             Platform::GoogleAds => $this->container->make(GoogleAdsClient::class),
             Platform::GoogleAnalytics4 => $this->container->make(GoogleAnalytics4Client::class),
+            Platform::Meta => $this->container->make(MetaClient::class),
             default => throw new \InvalidArgumentException(
                 "Platform [{$platform->value}] has no registered ConversionPlatformContract implementation."
             ),
