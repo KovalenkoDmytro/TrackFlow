@@ -6,6 +6,9 @@ import type {
   GoogleAdsSaveResponse,
   Ga4SettingsResponse,
   Ga4FormData,
+  MetaSettingsResponse,
+  MetaFormData,
+  MetaSaveResponse,
 } from '../types/api';
 import { ValidationError } from '../types/api';
 
@@ -71,5 +74,37 @@ export async function deleteGa4Settings(client: ApiClient): Promise<void> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to disconnect.');
+  }
+}
+
+export async function getMetaSettings(client: ApiClient): Promise<MetaSettingsResponse> {
+  const res = await client('/api/settings/meta');
+  if (!res.ok) throw new Error('Failed to load settings');
+  return res.json() as Promise<MetaSettingsResponse>;
+}
+
+export async function saveMetaSettings(
+  client: ApiClient,
+  data: MetaFormData,
+): Promise<MetaSaveResponse> {
+  const res = await client('/api/settings/meta', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const body = await res.json() as MetaSaveResponse | { errors?: Record<string, string[]>; error?: string };
+  if (res.status === 422 && 'errors' in body && body['errors']) {
+    throw new ValidationError(body['errors']);
+  }
+  if (!res.ok) {
+    throw new Error(('error' in body ? body['error'] : undefined) ?? 'An unexpected error occurred.');
+  }
+  return body as MetaSaveResponse;
+}
+
+export async function deleteMetaSettings(client: ApiClient): Promise<void> {
+  const res = await client('/api/settings/meta', { method: 'DELETE' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to disconnect.');
   }
 }
