@@ -28,19 +28,24 @@ final class PersistTrackingEvent
     public function handle(TrackingEventData $data, User $shop): TrackingEvent
     {
         $attributes = [
-            'user_id'        => $shop->getKey(),
-            'event'          => $data->event,
-            'value'          => $data->value,
-            'currency'       => $data->currency,
+            'user_id' => $shop->getKey(),
+            'event' => $data->event,
+            'value' => $data->value,
+            'currency' => $data->currency,
             'transaction_id' => $data->transactionId,
-            'gclid'          => $data->gclid,
-            'fbp'            => $data->fbp,
-            'fbc'            => $data->fbc,
-            'ttclid'         => $data->ttclid,
-            'ga_client_id'   => $data->gaClientId,
-            'ip'             => $data->ip,
-            'user_agent'     => $data->userAgent,
-            'occurred_at'    => $data->occurredAt,
+            'gclid' => $data->gclid,
+            'fbp' => $data->fbp,
+            'fbc' => $data->fbc,
+            'ttclid' => $data->ttclid,
+            'ga_client_id' => $data->gaClientId,
+            'ip' => $data->ip,
+            // The database column is VARCHAR(255). In-app browsers (Facebook,
+            // Instagram, etc.) regularly send longer values, so bound the
+            // optional diagnostic field instead of dropping the whole event.
+            'user_agent' => $data->userAgent !== null
+                ? mb_substr($data->userAgent, 0, 255)
+                : null,
+            'occurred_at' => $data->occurredAt,
         ];
 
         if ($data->idempotencyKey !== null) {
