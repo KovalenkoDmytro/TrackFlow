@@ -108,10 +108,12 @@ final class GoogleAdsClient implements ConversionPlatformContract
     public function setupConversionActions(PlatformIntegration $integration): void
     {
         $credentials = json_decode($integration->credentials, true);
+        $existingActions = $this->getExistingTrackFlowConversionActions($credentials);
 
         foreach (self::EVENT_CATEGORIES as $event => $category) {
             try {
-                $resourceName = $this->createConversionAction($credentials, $event, $category);
+                $resourceName = $existingActions[$event]
+                    ?? $this->createConversionAction($credentials, $event, $category);
 
                 ConversionActionMapping::updateOrCreate(
                     ['platform_integration_id' => $integration->getKey(), 'event' => $event],
@@ -125,6 +127,58 @@ final class GoogleAdsClient implements ConversionPlatformContract
                 ]);
             }
         }
+    }
+
+    /**
+     * Return existing TrackFlow conversion actions keyed by Shopify event name.
+     *
+     * Provisioning may be retried after Google created an action but before the
+     * local mapping was persisted. Discovering remote actions first makes setup
+     * idempotent and repairs missing mappings without creating duplicates.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, string>
+     */
+    private function getExistingTrackFlowConversionActions(array $credentials): array
+    {
+        $accessToken = $this->getAccessToken($credentials['oauth']);
+        $customerId = str_replace('-', '', $credentials['customer_id']);
+
+        $response = Http::withHeaders($this->buildHeaders($accessToken, $credentials))
+            ->post(
+                "https://googleads.googleapis.com/v24/customers/{$customerId}/googleAds:search",
+                [
+                    'query' => 'SELECT conversion_action.resource_name, conversion_action.name '
+                        .'FROM conversion_action '
+                        ."WHERE conversion_action.name LIKE 'TF - %'",
+                ],
+            );
+
+        if (! $response->successful()) {
+            $status = $response->status();
+            $errorMessage = $this->extractApiError($response->json(), $response->body());
+            throw new \RuntimeException("Failed to list Google Ads conversion actions [{$status}]: {$errorMessage}");
+        }
+
+        $actions = [];
+
+        foreach ($response->json('results', []) as $result) {
+            $conversionAction = $result['conversionAction'] ?? [];
+            $name = $conversionAction['name'] ?? null;
+            $resourceName = $conversionAction['resourceName'] ?? null;
+
+            if (! is_string($name) || ! str_starts_with($name, 'TF - ') || ! is_string($resourceName)) {
+                continue;
+            }
+
+            $event = substr($name, strlen('TF - '));
+
+            if (array_key_exists($event, self::EVENT_CATEGORIES)) {
+                $actions[$event] = $resourceName;
+            }
+        }
+
+        return $actions;
     }
 
     /**
