@@ -5,8 +5,20 @@ declare(strict_types=1);
 use App\Enums\TrackingEventType;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 describe('GET /api/analytics', function (): void {
+    beforeEach(function (): void {
+        // Fixtures below use hardcoded dates (e.g. 2026-05-03). Freeze "now" so
+        // those dates stay within the retention window (config('tracking.retention_days'))
+        // regardless of when the test suite actually runs.
+        $this->travelTo(Carbon::parse('2026-07-31 12:00:00'));
+    });
+
+    afterEach(function (): void {
+        $this->travelBack();
+    });
+
     it('returns 401 or 302 for unauthenticated requests', function (): void {
         $response = $this->getJson('/api/analytics');
 
@@ -37,19 +49,19 @@ describe('GET /api/analytics', function (): void {
     it('returns correct structure for mode=single_day with a specific date', function (): void {
         $shop = User::factory()->create();
 
-        TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-01 10:00:00')->create();
+        TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 10:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
         expect($response->json('filters.mode'))->toBe('single_day');
-        expect($response->json('filters.date'))->toBe('2026-05-01');
+        expect($response->json('filters.date'))->toBe('2026-05-03');
         expect($response->json('filters.start_date'))->toBeNull();
         expect($response->json('filters.end_date'))->toBeNull();
         expect($response->json('summary.counts'))->toHaveCount(9);
-        expect($response->json('summary.period.start'))->toBe('2026-05-01');
-        expect($response->json('summary.period.end'))->toBe('2026-05-01');
+        expect($response->json('summary.period.start'))->toBe('2026-05-03');
+        expect($response->json('summary.period.end'))->toBe('2026-05-03');
         expect($response->json('summary.period.days'))->toBe(1);
 
         $purchase = collect($response->json('summary.counts'))->firstWhere('event', 'purchase');
@@ -63,18 +75,18 @@ describe('GET /api/analytics', function (): void {
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::AddToCart)->occurredAt('2026-05-03 14:00:00')->create();
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::ViewItem)->occurredAt('2026-05-05 09:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-05-01&end_date=2026-05-07');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-05-03&end_date=2026-05-07');
 
         $response->assertOk();
 
         expect($response->json('filters.mode'))->toBe('range');
-        expect($response->json('filters.start_date'))->toBe('2026-05-01');
+        expect($response->json('filters.start_date'))->toBe('2026-05-03');
         expect($response->json('filters.end_date'))->toBe('2026-05-07');
         expect($response->json('filters.date'))->toBeNull();
         expect($response->json('summary.counts'))->toHaveCount(9);
-        expect($response->json('summary.period.start'))->toBe('2026-05-01');
+        expect($response->json('summary.period.start'))->toBe('2026-05-03');
         expect($response->json('summary.period.end'))->toBe('2026-05-07');
-        expect($response->json('summary.period.days'))->toBe(7);
+        expect($response->json('summary.period.days'))->toBe(5);
         expect($response->json('summary.total'))->toBe(2);
     });
 
@@ -91,10 +103,10 @@ describe('GET /api/analytics', function (): void {
         $shopA = User::factory()->create();
         $shopB = User::factory()->create();
 
-        TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-01 12:00:00')->create();
-        TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::AddToCart)->occurredAt('2026-05-01 13:00:00')->create();
+        TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 12:00:00')->create();
+        TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::AddToCart)->occurredAt('2026-05-03 13:00:00')->create();
 
-        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-01');
+        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
@@ -108,7 +120,7 @@ describe('GET /api/analytics', function (): void {
     it('response summary.counts contains all 9 canonical event types', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
@@ -125,7 +137,25 @@ describe('GET /api/analytics', function (): void {
 
         $response->assertOk();
 
-        expect($response->json('meta.max_range_days'))->toBe(366);
+        expect($response->json('meta.max_range_days'))->toBe(90);
+        expect($response->json('meta.retention_days'))->toBe(90);
+        expect($response->json('meta.earliest_date'))->toBe('2026-05-02');
         expect($response->json('meta.available_events'))->toHaveCount(9);
+    });
+
+    it('rejects dates older than the retention window', function (): void {
+        $shop = User::factory()->create();
+
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01');
+
+        $response->assertUnprocessable()->assertJsonValidationErrors(['date']);
+    });
+
+    it('rejects future dates', function (): void {
+        $shop = User::factory()->create();
+
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-07-31&end_date=2026-08-01');
+
+        $response->assertUnprocessable()->assertJsonValidationErrors(['end_date']);
     });
 });
