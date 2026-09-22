@@ -12,3 +12,9 @@ Artisan::command('inspire', function () {
 // The bulk migration itself (shopify:migrate-offline-tokens) is run manually
 // by an operator (canary rollout), not scheduled.
 Schedule::command('shopify:detect-orphaned-shops')->daily();
+
+// Keep raw tracking data for 90 days by default. Related platform deliveries
+// are removed automatically by the tracking_events foreign-key cascade.
+Schedule::command('tracking:prune')
+    ->dailyAt('03:15')
+    ->withoutOverlapping(180);
