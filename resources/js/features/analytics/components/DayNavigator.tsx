@@ -1,8 +1,17 @@
 // resources/js/features/analytics/components/DayNavigator.tsx
 import { Box, Button, Typography } from '@mui/material';
 
-function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+function localDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return localDateString(date);
 }
 
 function formatDateLabel(iso: string): string {
@@ -20,14 +29,17 @@ function shiftDate(iso: string, days: number): string {
 interface DayNavigatorProps {
   date: string;
   onChange: (date: string) => void;
+  retentionDays: number;
 }
 
-export function DayNavigator({ date, onChange }: DayNavigatorProps) {
-  const isToday = date === todayString();
+export function DayNavigator({ date, onChange, retentionDays }: DayNavigatorProps) {
+  const today = localDateString();
+  const earliestDate = dateDaysAgo(retentionDays);
+  const isToday = date === today;
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Button size="small" variant="outlined" onClick={() => onChange(shiftDate(date, -1))}>
+      <Button size="small" variant="outlined" onClick={() => onChange(shiftDate(date, -1))} disabled={date <= earliestDate}>
         ← Prev
       </Button>
       <Typography variant="body2" sx={{ minWidth: 160, textAlign: 'center' }}>
@@ -37,14 +49,14 @@ export function DayNavigator({ date, onChange }: DayNavigatorProps) {
         size="small"
         variant="outlined"
         onClick={() => onChange(shiftDate(date, 1))}
-        disabled={date >= todayString()}
+        disabled={date >= today}
       >
         Next →
       </Button>
       <Button
         size="small"
         variant={isToday ? 'contained' : 'outlined'}
-        onClick={() => onChange(todayString())}
+        onClick={() => onChange(today)}
         disabled={isToday}
       >
         Today

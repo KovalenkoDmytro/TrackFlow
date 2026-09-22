@@ -42,8 +42,17 @@ export interface AnalyticsSummary {
   period: AnalyticsPeriod | null;
 }
 
+export interface AnalyticsMeta {
+  available_events: string[];
+  max_range_days: number;
+  retention_days: number;
+  earliest_date: string;
+  today: string;
+}
+
 export interface AnalyticsResponse {
   summary: AnalyticsSummary;
+  meta: AnalyticsMeta;
 }
 
 export interface PlatformDeliveryStat {
@@ -71,6 +80,7 @@ export interface PlatformDeliverySummary {
 
 export interface PlatformDeliveryResponse {
   summary: PlatformDeliverySummary;
+  meta: AnalyticsMeta;
 }
 
 export interface GoogleAdsOAuth {

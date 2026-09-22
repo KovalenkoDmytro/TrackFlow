@@ -13,7 +13,7 @@ use Illuminate\Validation\Validator;
  *
  * Supports two modes:
  *   - single_day: show counts for a single calendar day identified by `date`
- *   - range:      show counts aggregated over a custom date range with max 366 days
+ *   - range:      show counts aggregated over the configured retention period
  *
  * Authorization is always true — the API route middleware handles shop authentication.
  */
@@ -34,11 +34,16 @@ final class AnalyticsFilterRequest extends FormRequest
     /** @return array<string, array<string>> */
     public function rules(): array
     {
+        $timezone = config('app.timezone', 'UTC');
+        $retentionDays = (int) config('tracking.retention_days', 90);
+        $today = CarbonImmutable::now($timezone)->toDateString();
+        $earliestDate = CarbonImmutable::now($timezone)->subDays($retentionDays)->toDateString();
+
         return [
             'mode' => ['nullable', 'string', 'in:single_day,range'],
-            'date' => ['nullable', 'date_format:Y-m-d'],
-            'start_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range'],
-            'end_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range', 'after_or_equal:start_date'],
+            'date' => ['nullable', 'date_format:Y-m-d', "after_or_equal:{$earliestDate}", "before_or_equal:{$today}"],
+            'start_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range', "after_or_equal:{$earliestDate}", "before_or_equal:{$today}"],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'required_if:mode,range', 'after_or_equal:start_date', "after_or_equal:{$earliestDate}", "before_or_equal:{$today}"],
             'platform' => ['nullable', 'string', 'in:google_ads,meta,tiktok,ga4'],
         ];
     }
@@ -46,7 +51,7 @@ final class AnalyticsFilterRequest extends FormRequest
     /**
      * Additional validation after the basic rules pass.
      *
-     * Enforces the 366-day maximum range when mode is 'range'.
+     * Enforces the configured retention window when mode is 'range'.
      */
     public function withValidator(Validator $validator): void
     {
@@ -65,8 +70,9 @@ final class AnalyticsFilterRequest extends FormRequest
             $days = (int) CarbonImmutable::parse($start)
                 ->diffInDays(CarbonImmutable::parse($end));
 
-            if ($days > 366) {
-                $v->errors()->add('end_date', 'The date range may not exceed 366 days.');
+            $retentionDays = (int) config('tracking.retention_days', 90);
+            if ($days > $retentionDays) {
+                $v->errors()->add('end_date', "The date range may not exceed {$retentionDays} days.");
             }
         });
     }

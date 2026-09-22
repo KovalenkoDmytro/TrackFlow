@@ -8,6 +8,7 @@ use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 /**
  * @return array{TrackingEvent, PlatformIntegration}
@@ -50,22 +51,33 @@ function createMetaDelivery(
 }
 
 describe('GET /api/analytics?platform=meta — delivery stats', function (): void {
+    beforeEach(function (): void {
+        // Fixtures below use hardcoded dates (e.g. 2026-05-03). Freeze "now" so
+        // those dates stay within the retention window (config('tracking.retention_days'))
+        // regardless of when the test suite actually runs.
+        $this->travelTo(Carbon::parse('2026-07-31 12:00:00'));
+    });
+
+    afterEach(function (): void {
+        $this->travelBack();
+    });
+
     it('aggregates delivered, failed (merged with partial_failure), and pending counts per event', function (): void {
         $shop = User::factory()->create();
 
-        [$purchaseEvent, $integration] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-01 10:00:00');
-        createMetaDelivery($purchaseEvent, $integration, 'delivered', '2026-05-01 10:00:05');
+        [$purchaseEvent, $integration] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 10:00:00');
+        createMetaDelivery($purchaseEvent, $integration, 'delivered', '2026-05-03 10:00:05');
 
-        [$purchaseEvent2] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-01 11:00:00');
-        createMetaDelivery($purchaseEvent2, $integration, 'failed', '2026-05-01 11:00:05', 'Invalid access token');
+        [$purchaseEvent2] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 11:00:00');
+        createMetaDelivery($purchaseEvent2, $integration, 'failed', '2026-05-03 11:00:05', 'Invalid access token');
 
-        [$purchaseEvent3] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-01 12:00:00');
-        createMetaDelivery($purchaseEvent3, $integration, 'partial_failure', '2026-05-01 12:00:05', 'Event partially rejected');
+        [$purchaseEvent3] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 12:00:00');
+        createMetaDelivery($purchaseEvent3, $integration, 'partial_failure', '2026-05-03 12:00:05', 'Event partially rejected');
 
-        [$purchaseEvent4] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-01 13:00:00');
-        createMetaDelivery($purchaseEvent4, $integration, 'queued', '2026-05-01 13:00:05');
+        [$purchaseEvent4] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 13:00:00');
+        createMetaDelivery($purchaseEvent4, $integration, 'queued', '2026-05-03 13:00:05');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=meta');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -95,7 +107,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
     it('zero-fills all 9 canonical event types even with no deliveries', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=meta');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -121,13 +133,13 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
     it('surfaces the most recent failure message as last_error per event type', function (): void {
         $shop = User::factory()->create();
 
-        [$event1, $integration] = createMetaTrackingEvent($shop, TrackingEventType::AddToCart, '2026-05-01 09:00:00');
-        createMetaDelivery($event1, $integration, 'failed', '2026-05-01 09:00:05', 'Older error message');
+        [$event1, $integration] = createMetaTrackingEvent($shop, TrackingEventType::AddToCart, '2026-05-03 09:00:00');
+        createMetaDelivery($event1, $integration, 'failed', '2026-05-03 09:00:05', 'Older error message');
 
-        [$event2] = createMetaTrackingEvent($shop, TrackingEventType::AddToCart, '2026-05-01 15:00:00');
-        createMetaDelivery($event2, $integration, 'partial_failure', '2026-05-01 15:00:05', 'Most recent error message');
+        [$event2] = createMetaTrackingEvent($shop, TrackingEventType::AddToCart, '2026-05-03 15:00:00');
+        createMetaDelivery($event2, $integration, 'partial_failure', '2026-05-03 15:00:05', 'Most recent error message');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=meta');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -140,10 +152,10 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         $shopA = User::factory()->create();
         $shopB = User::factory()->create();
 
-        [$eventB, $integrationB] = createMetaTrackingEvent($shopB, TrackingEventType::Purchase, '2026-05-01 10:00:00');
-        createMetaDelivery($eventB, $integrationB, 'delivered', '2026-05-01 10:00:05');
+        [$eventB, $integrationB] = createMetaTrackingEvent($shopB, TrackingEventType::Purchase, '2026-05-03 10:00:00');
+        createMetaDelivery($eventB, $integrationB, 'delivered', '2026-05-03 10:00:05');
 
-        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=meta');
+        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -160,15 +172,15 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         // Event occurred inside the requested period, but the delivery attempt
         // (created_at) landed the next day — e.g. queued near midnight and
         // processed after the period boundary. Should still be counted.
-        [$eventInsidePeriod, $integration] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-01 23:59:30');
-        createMetaDelivery($eventInsidePeriod, $integration, 'delivered', '2026-05-02 00:00:10');
+        [$eventInsidePeriod, $integration] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 23:59:30');
+        createMetaDelivery($eventInsidePeriod, $integration, 'delivered', '2026-05-04 00:00:10');
 
         // Event occurred outside the requested period, but its delivery row
         // was created_at within the period — should NOT be counted.
-        [$eventOutsidePeriod] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-02 00:00:30');
-        createMetaDelivery($eventOutsidePeriod, $integration, 'delivered', '2026-05-01 23:59:50');
+        [$eventOutsidePeriod] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-04 00:00:30');
+        createMetaDelivery($eventOutsidePeriod, $integration, 'delivered', '2026-05-03 23:59:50');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=meta');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -181,9 +193,9 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
     it('does not affect the response shape for other platforms', function (): void {
         $shop = User::factory()->create();
 
-        TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-01 10:00:00')->create();
+        TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 10:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01&platform=ga4');
+        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=ga4');
 
         $response->assertOk();
 

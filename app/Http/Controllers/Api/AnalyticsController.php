@@ -17,7 +17,7 @@ use Illuminate\Http\JsonResponse;
  *
  * Supports two filter modes:
  *   - single_day: counts for a single calendar day
- *   - range:      counts aggregated over a custom date range (max 366 days)
+ *   - range:      counts aggregated over a custom date range (max config('tracking.retention_days') days)
  *
  * Defaults to today in the application timezone when no filters are provided.
  */
@@ -67,9 +67,13 @@ final class AnalyticsController extends Controller
             'end_date' => $mode === 'range' ? $end->toDateString() : null,
         ];
 
+        $retentionDays = (int) config('tracking.retention_days', 90);
+
         $meta = [
             'available_events' => array_map(fn (TrackingEventType $c): string => $c->value, TrackingEventType::cases()),
-            'max_range_days' => 366,
+            'max_range_days' => $retentionDays,
+            'retention_days' => $retentionDays,
+            'earliest_date' => $today->subDays($retentionDays)->toDateString(),
             'today' => $today->toDateString(),
         ];
 

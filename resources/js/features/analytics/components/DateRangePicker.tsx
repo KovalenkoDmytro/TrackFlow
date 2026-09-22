@@ -2,22 +2,35 @@
 import { useState } from 'react';
 import { Box, Button, TextField, Typography } from '@mui/material';
 
-function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+function localDateString(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return localDateString(date);
 }
 
 interface DateRangePickerProps {
   startDate: string;
   endDate: string;
   onApply: (start: string, end: string) => void;
+  retentionDays: number;
 }
 
-export function DateRangePicker({ startDate, endDate, onApply }: DateRangePickerProps) {
+export function DateRangePicker({ startDate, endDate, onApply, retentionDays }: DateRangePickerProps) {
   const [localStart, setLocalStart] = useState(startDate);
   const [localEnd, setLocalEnd] = useState(endDate);
   const [error, setError] = useState('');
 
   function handleApply() {
+    const today = localDateString();
+    const earliestDate = dateDaysAgo(retentionDays);
+
     if (!localStart || !localEnd) {
       setError('Please select both a start and end date.');
       return;
@@ -26,11 +39,12 @@ export function DateRangePicker({ startDate, endDate, onApply }: DateRangePicker
       setError('Start date must be on or before end date.');
       return;
     }
-    const days = Math.round(
-      (new Date(localEnd).getTime() - new Date(localStart).getTime()) / 86400000,
-    );
-    if (days > 366) {
-      setError('Date range may not exceed 366 days.');
+    if (localStart < earliestDate || localEnd < earliestDate) {
+      setError(`Data is available only for the last ${retentionDays} days.`);
+      return;
+    }
+    if (localStart > today || localEnd > today) {
+      setError('Future dates cannot be selected.');
       return;
     }
     setError('');
@@ -45,7 +59,7 @@ export function DateRangePicker({ startDate, endDate, onApply }: DateRangePicker
         size="small"
         value={localStart}
         onChange={(e) => { setLocalStart(e.target.value); setError(''); }}
-        slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: todayString() } }}
+        slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: dateDaysAgo(retentionDays), max: localDateString() } }}
       />
       <TextField
         label="End date"
@@ -53,7 +67,7 @@ export function DateRangePicker({ startDate, endDate, onApply }: DateRangePicker
         size="small"
         value={localEnd}
         onChange={(e) => { setLocalEnd(e.target.value); setError(''); }}
-        slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: localStart, max: todayString() } }}
+        slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: localStart || dateDaysAgo(retentionDays), max: localDateString() } }}
       />
       <Button variant="contained" size="small" onClick={handleApply} sx={{ mt: 0.5 }}>
         Apply

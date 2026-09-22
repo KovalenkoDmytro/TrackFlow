@@ -11,6 +11,10 @@ import { PlatformDeliveryTable } from './components/PlatformDeliveryTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import type { AnalyticsMode, AnalyticsParams, AnalyticsResponse, PlatformDeliveryResponse } from '../../types/api';
 
+// Fallback used only until the first API response arrives; the API's `meta.retention_days`
+// (sourced from config('tracking.retention_days')) is the source of truth thereafter.
+const DEFAULT_RETENTION_DAYS = 90;
+
 const PLATFORM_LABELS: Record<string, string> = {
   google_ads: 'Google Ads',
   meta: 'Meta',
@@ -19,7 +23,11 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function AnalyticsPage() {
@@ -47,6 +55,7 @@ export function AnalyticsPage() {
   const period = data?.summary?.period ?? null;
   const deliveryStats = deliveryData?.summary?.delivery_stats ?? [];
   const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0 };
+  const retentionDays = data?.meta?.retention_days ?? DEFAULT_RETENTION_DAYS;
 
   const title = platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
 
@@ -66,15 +75,19 @@ export function AnalyticsPage() {
 
       <Card variant="outlined" sx={{ mb: 3, p: 2 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Alert severity="info">
+            Tracking data is stored for {retentionDays} days. Dates outside this period are unavailable.
+          </Alert>
           <ModeToggle mode={mode} onChange={setMode} />
 
           {mode === 'single_day' ? (
-            <DayNavigator date={date} onChange={setDate} />
+            <DayNavigator date={date} onChange={setDate} retentionDays={retentionDays} />
           ) : (
             <DateRangePicker
               startDate={startDate}
               endDate={endDate}
               onApply={(s, e) => { setStartDate(s); setEndDate(e); }}
+              retentionDays={retentionDays}
             />
           )}
 
