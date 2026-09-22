@@ -7,7 +7,9 @@ namespace App\Http\Controllers;
 use App\Actions\Tracking\ProcessTrackingEvent;
 use App\Http\Requests\TrackEventRequest;
 use App\Services\ConversionAuthenticator;
+use App\Services\ViewItemRateLimiter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Receives Web Pixel events from the Shopify storefront and enqueues them for processing.
@@ -18,7 +20,10 @@ use Illuminate\Http\JsonResponse;
  */
 final class ConversionController extends Controller
 {
-    public function __construct(private readonly ConversionAuthenticator $auth) {}
+    public function __construct(
+        private readonly ConversionAuthenticator $auth,
+        private readonly ViewItemRateLimiter $viewItemRateLimiter,
+    ) {}
 
     /**
      * Accept a single tracking event from the Shopify Web Pixel.
@@ -28,9 +33,20 @@ final class ConversionController extends Controller
      */
     public function track(TrackEventRequest $request): JsonResponse
     {
-        $this->auth->authenticate($request->shopDomain(), $request->trackingSecret());
+        $shop = $this->auth->authenticate($request->shopDomain(), $request->trackingSecret());
+        $data = $request->toTrackingEventData();
 
-        ProcessTrackingEvent::dispatch($request->toTrackingEventData());
+        if (! $this->viewItemRateLimiter->allow($shop, $data->event, $data->ip)) {
+            Log::info('ConversionController: view_item event rate limited', [
+                'shop_id' => $shop->getKey(),
+                'ip' => $data->ip,
+                'event' => $data->event,
+            ]);
+
+            return response()->json(['ok' => true, 'rate_limited' => true], 202);
+        }
+
+        ProcessTrackingEvent::dispatch($data);
 
         return response()->json(['ok' => true]);
     }
