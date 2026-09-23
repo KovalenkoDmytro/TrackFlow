@@ -8,6 +8,7 @@ import {
   TableCell,
   TableFooter,
   TableHead,
+  TableContainer,
   TableRow,
   Tooltip,
   Typography,
@@ -39,20 +40,20 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
         </Alert>
       )}
 
-      <Table size="small">
+      <TableContainer sx={{ width: '100%', overflowX: 'auto' }}><Table size="small" sx={{ minWidth: { xs: 560, sm: 740 } }}>
         <TableHead>
-          <TableRow>
-            <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>Event</Typography></TableCell>
-            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600 }}>Attempted</Typography></TableCell>
-            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600 }}>Delivered</Typography></TableCell>
-            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600 }}>Failed</Typography></TableCell>
-            <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600 }}>Pending</Typography></TableCell>
-            <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>Last error</Typography></TableCell>
+          <TableRow sx={{ '& th': { bgcolor: '#f8f9fc', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+            <TableCell>Event</TableCell>
+            <TableCell align="right">Attempted</TableCell>
+            <TableCell align="right">Delivered</TableCell>
+            <TableCell align="right">Failed</TableCell>
+            <TableCell align="right">Pending</TableCell>
+            <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Last error</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {stats.map((row) => (
-            <TableRow key={row.event}>
+            <TableRow key={row.event} hover>
               <TableCell>
                 <Typography variant="body2" color={row.attempted === 0 ? 'text.disabled' : 'text.primary'}>
                   {row.label}
@@ -94,7 +95,7 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
                   {row.pending.toLocaleString()}
                 </Typography>
               </TableCell>
-              <TableCell sx={{ maxWidth: 240 }}>
+              <TableCell sx={{ maxWidth: 200, display: { xs: 'none', sm: 'table-cell' } }}>
                 {row.last_error ? (
                   <Tooltip title={row.last_error}>
                     <Typography
@@ -117,8 +118,8 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
           ))}
         </TableBody>
         <TableFooter>
-          <TableRow>
-            <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>Total</Typography></TableCell>
+          <TableRow sx={{ bgcolor: '#fafbfe', '& td': { fontWeight: 750 } }}>
+            <TableCell>Total</TableCell>
             <TableCell align="right">
               <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 {totals.attempted.toLocaleString()}
@@ -139,10 +140,10 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
                 {totals.pending.toLocaleString()}
               </Typography>
             </TableCell>
-            <TableCell />
+            <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }} />
           </TableRow>
         </TableFooter>
-      </Table>
+      </Table></TableContainer>
     </Box>
   );
 }

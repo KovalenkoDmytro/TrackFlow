@@ -13,7 +13,7 @@ interface PlatformCardProps {
 
 export function PlatformCard({ label, initial, color, bg, connected, comingSoon = false, onNavigate, onViewEvents }: PlatformCardProps) {
   return (
-    <Card variant="outlined" sx={{ position: 'relative', overflow: 'hidden' }}>
+    <Card variant="outlined" sx={{ position: 'relative', overflow: 'hidden', transition: 'transform .18s ease, box-shadow .18s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 22px rgba(25,32,56,.08)' } }}>
       {comingSoon && (
         <Chip
           label="Coming soon"
@@ -43,7 +43,7 @@ export function PlatformCard({ label, initial, color, bg, connected, comingSoon 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
             sx={{
-              width: 36, height: 36, borderRadius: '50%',
+            width: 42, height: 42, borderRadius: 2.5,
               bgcolor: bg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 700, fontSize: 14, color,
@@ -52,16 +52,16 @@ export function PlatformCard({ label, initial, color, bg, connected, comingSoon 
             {initial}
           </Box>
           <Box>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>{label}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>{label}</Typography>
             <Chip
               label={connected ? 'Connected' : 'Not Connected'}
               color={connected ? 'success' : 'default'}
               size="small"
-              sx={{ mt: 0.5 }}
+              sx={{ mt: 0.75, height: 23, fontSize: 11, fontWeight: 650 }}
             />
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'raw', gap: 1, alignItems: 'flex-end' }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: 'center' }}>
             {
                 connected && <Button variant="contained" size="small" onClick={onViewEvents}>Events</Button>
             }

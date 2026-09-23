@@ -1,5 +1,6 @@
 // resources/js/features/analytics/components/DayNavigator.tsx
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button } from '@mui/material';
+import { CalendarDatePicker } from './CalendarDatePicker';
 
 function localDateString(date = new Date()): string {
   const year = date.getFullYear();
@@ -14,16 +15,10 @@ function dateDaysAgo(days: number): string {
   return localDateString(date);
 }
 
-function formatDateLabel(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
-
 function shiftDate(iso: string, days: number): string {
   const [year, month, day] = iso.split('-').map(Number);
   const d = new Date(year, month - 1, day + days);
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 
 interface DayNavigatorProps {
@@ -42,9 +37,7 @@ export function DayNavigator({ date, onChange, retentionDays }: DayNavigatorProp
       <Button size="small" variant="outlined" onClick={() => onChange(shiftDate(date, -1))} disabled={date <= earliestDate}>
         ← Prev
       </Button>
-      <Typography variant="body2" sx={{ minWidth: 160, textAlign: 'center' }}>
-        {formatDateLabel(date)}
-      </Typography>
+      <CalendarDatePicker value={date} onChange={onChange} retentionDays={retentionDays} />
       <Button
         size="small"
         variant="outlined"

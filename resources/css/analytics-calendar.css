@@ -1,0 +1,36 @@
+.trackflow-calendar {
+  --rdp-accent-color: #5557d9;
+  --rdp-accent-background-color: #f0f0ff;
+  --rdp-today-color: #5557d9;
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 34px;
+  --rdp-day_button-width: 34px;
+  --rdp-nav_button-height: 32px;
+  --rdp-nav_button-width: 32px;
+  --rdp-months-gap: 16px;
+  margin: 0;
+  color: #1c2030;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.trackflow-calendar .rdp-month_caption {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.trackflow-calendar .rdp-weekday {
+  color: #72788a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trackflow-calendar .rdp-day_button {
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.trackflow-calendar .rdp-day_button:hover:not(:disabled) {
+  background: #f0f0ff;
+}

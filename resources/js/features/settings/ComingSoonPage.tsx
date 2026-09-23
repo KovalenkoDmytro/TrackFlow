@@ -1,6 +1,7 @@
 // resources/js/features/settings/ComingSoonPage.tsx
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button, Card, Typography } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { PageLayout } from '../../components/ui/PageLayout';
 
 export function ComingSoonPage() {
   const navigate = useNavigate();
@@ -11,17 +12,12 @@ export function ComingSoonPage() {
     ?.replace('-', ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase()) ?? '';
 
-  return (
-    <Box sx={{ maxWidth: 600, mx: 'auto', p: 3, textAlign: 'center', mt: 8 }}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
-        {name} Integration
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        This integration is coming soon.
-      </Typography>
-      <Button variant="outlined" onClick={() => navigate('/')}>
-        Back to Dashboard
-      </Button>
-    </Box>
-  );
+  return <PageLayout title={`${name} integration`} backTo="/">
+    <Card variant="outlined" sx={{ maxWidth: 720, mx: 'auto', p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
+      <Box sx={{ width: 56, height: 56, mx: 'auto', mb: 2, borderRadius: 3, display: 'grid', placeItems: 'center', bgcolor: '#f0f0ff', color: 'primary.main', fontSize: 22, fontWeight: 800 }}>T</Box>
+      <Typography variant="h5" gutterBottom>{name} tracking is on the way</Typography>
+      <Typography color="text.secondary" sx={{ mb: 3 }}>This integration is being prepared. You can continue managing your connected platforms from the overview.</Typography>
+      <Button variant="contained" onClick={() => navigate('/')}>Back to overview</Button>
+    </Card>
+  </PageLayout>;
 }
