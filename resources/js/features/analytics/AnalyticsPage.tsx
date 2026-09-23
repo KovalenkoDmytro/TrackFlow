@@ -66,14 +66,14 @@ export function AnalyticsPage() {
   ) : undefined;
 
   return (
-    <PageLayout title={title} maxWidth={800} backTo="/" actions={actions}>
+    <PageLayout title={title} backTo="/" actions={actions}>
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error.message}
         </Alert>
       )}
 
-      <Card variant="outlined" sx={{ mb: 3, p: 2 }}>
+      <Card variant="outlined" sx={{ mb: 3, p: { xs: 1.5, sm: 2.5 } }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Alert severity="info">
             Tracking data is stored for {retentionDays} days. Dates outside this period are unavailable.
@@ -99,7 +99,7 @@ export function AnalyticsPage() {
         </Box>
       </Card>
 
-      <Card variant="outlined">
+      <Card variant="outlined" sx={{ overflow: 'hidden' }}>
         {isMeta ? (
           <PlatformDeliveryTable stats={deliveryStats} totals={deliveryTotals} loading={isFetching} />
         ) : (

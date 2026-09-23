@@ -11,18 +11,18 @@ interface PageLayoutProps {
   children: ReactNode;
 }
 
-export function PageLayout({ title, maxWidth = 720, backTo, actions, children }: PageLayoutProps) {
+export function PageLayout({ title, maxWidth = 1120, backTo, actions, children }: PageLayoutProps) {
   const navigate = useNavigate();
 
   return (
-    <Box sx={{ maxWidth, mx: 'auto', p: 3 }}>
+    <Box sx={{ width: '100%', maxWidth, mx: 'auto', px: { xs: 1.5, sm: 2.5 }, py: { xs: 2.5, sm: 3 } }}>
       {backTo && (
-        <Button variant="text" size="small" sx={{ mb: 2 }} onClick={() => navigate(backTo)}>
-          ← Back
+        <Button variant="text" size="small" sx={{ mb: 1.5, ml: -1, color: 'text.secondary' }} onClick={() => navigate(backTo)}>
+          ← Back to overview
         </Button>
       )}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+      <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, mb: 3 }}>
+        <Typography variant="h5" sx={{ fontSize: { xs: 25, md: 30 } }}>
           {title}
         </Typography>
         {actions}
