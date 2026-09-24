@@ -297,7 +297,7 @@ return [
     |
     */
 
-    'api_time_store' => env('SHOPIFY_API_TIME_STORE', \Gnikyt\BasicShopifyAPI\Store\Memory::class),
+    'api_time_store' => env('SHOPIFY_API_TIME_STORE', Memory::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -309,7 +309,7 @@ return [
     |
     */
 
-    'api_limit_store' => env('SHOPIFY_API_LIMIT_STORE', \Gnikyt\BasicShopifyAPI\Store\Memory::class),
+    'api_limit_store' => env('SHOPIFY_API_LIMIT_STORE', Memory::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -321,7 +321,7 @@ return [
     |
     */
 
-    'api_deferrer' => env('SHOPIFY_API_DEFERRER', \Gnikyt\BasicShopifyAPI\Deferrers\Sleep::class),
+    'api_deferrer' => env('SHOPIFY_API_DEFERRER', Sleep::class),
 
     /*
     |--------------------------------------------------------------------------
@@ -389,7 +389,6 @@ return [
     */
 
     'billing_redirect' => env('SHOPIFY_BILLING_REDIRECT', '/billing/process'),
-
 
     /*
     |--------------------------------------------------------------------------
@@ -463,7 +462,7 @@ return [
     */
 
     'scripttags' => [
-        /*
+    /*
             [
                 'src' => env('SHOPIFY_SCRIPTTAG_1_SRC', 'https://example.com/some-controller/js-method-response'),
                 'event' => env('SHOPIFY_SCRIPTTAG_1_EVENT', 'onload'),
@@ -489,7 +488,7 @@ return [
      * @see
      */
     'after_authenticate_job' => [
-        /*
+    /*
             [
                 'job' => env('AFTER_AUTHENTICATE_JOB'), // example: \App\Jobs\AfterAuthorizeJob::class
                 'inline' => env('AFTER_AUTHENTICATE_JOB_INLINE', false) // False = dispatch job for later, true = dispatch immediately
@@ -557,12 +556,12 @@ return [
         /*
         * The fully qualified class name of the Charge model.
         */
-        'charge' => Osiset\ShopifyApp\Storage\Models\Charge::class,
+        'charge' => Charge::class,
 
         /*
         * The fully qualified class name of the Plan model.
         */
-        'plan' => Osiset\ShopifyApp\Storage\Models\Plan::class,
+        'plan' => Plan::class,
     ],
 
     'table_names' => [
@@ -611,7 +610,7 @@ return [
          * Available levels: FULL, PARTIAL, UNSUPPORTED.
          */
         'unacceptable_levels' => [
-            Osiset\ShopifyApp\Objects\Enums\ThemeSupportLevel::UNSUPPORTED,
+            ThemeSupportLevel::UNSUPPORTED,
         ],
     ],
 
@@ -649,5 +648,23 @@ return [
     */
     'forbidden_web_middleware_groups' => [
         'api',
-    ]
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local session-token auth bypass
+    |--------------------------------------------------------------------------
+    |
+    | Local-only escape hatch for App\Http\Middleware\AuthenticateShopifySessionToken
+    | so `/api/*` can be exercised without a real Shopify session token. Only
+    | takes effect when app()->environment('local') is also true (enforced in
+    | App\Providers\AppServiceProvider::guardAgainstUnsupportedShopifyDevBypass())
+    | and the request carries no bearer token — any real token, even locally,
+    | is always verified in full.
+    |
+    */
+
+    'dev_auth_bypass' => (bool) env('SHOPIFY_DEV_AUTH_BYPASS', false),
+
+    'dev_shop_domain' => env('SHOPIFY_DEV_SHOP_DOMAIN'),
 ];

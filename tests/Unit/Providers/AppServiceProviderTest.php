@@ -52,4 +52,66 @@ describe('AppServiceProvider: forces "authenticate" out of the vendor Shopify ro
 
         expect(array_count_values($manualRoutes)['authenticate'])->toBe(1);
     });
+
+    it('also forces out "authenticate.token" (reflected XSS in the vendor view) and the unused billing routes', function (): void {
+        config(['shopify-app.manual_routes' => 'home,webhook']);
+
+        $provider = new AppServiceProvider(app());
+        $provider->register();
+
+        $manualRoutes = explode(',', (string) config('shopify-app.manual_routes'));
+
+        expect($manualRoutes)
+            ->toContain('authenticate.token')
+            ->toContain('api')
+            ->toContain('billing')
+            ->toContain('billing.process')
+            ->toContain('billing.usage_charge');
+    });
+});
+
+describe('AppServiceProvider: the vendor routes closed above are genuinely unregistered', function (): void {
+    it('does not register /authenticate/token (reflected XSS in the vendor token.blade.php view)', function (): void {
+        $response = $this->get('/authenticate/token?shop=nobody.myshopify.com&target=</script><script>alert(document.domain)</script>');
+
+        $response->assertNotFound();
+    });
+
+    it('does not register the unauthenticated vendor billing routes', function (): void {
+        $this->get('/billing')->assertNotFound();
+        $this->get('/billing/process')->assertNotFound();
+        $this->get('/billing/usage-charge')->assertNotFound();
+    });
+});
+
+describe('AppServiceProvider: Shopify credential safety guard', function (): void {
+    it('throws when SHOPIFY_API_SECRET is blank outside the testing environment', function (): void {
+        app()->detectEnvironment(fn () => 'production');
+        config(['shopify-app.api_secret' => '']);
+
+        $provider = new AppServiceProvider(app());
+
+        expect(fn () => $provider->boot())->toThrow(RuntimeException::class);
+
+        app()->detectEnvironment(fn () => 'testing');
+    });
+
+    it('throws when SHOPIFY_API_KEY is blank outside the testing environment', function (): void {
+        app()->detectEnvironment(fn () => 'production');
+        config(['shopify-app.api_key' => '']);
+
+        $provider = new AppServiceProvider(app());
+
+        expect(fn () => $provider->boot())->toThrow(RuntimeException::class);
+
+        app()->detectEnvironment(fn () => 'testing');
+    });
+
+    it('does not throw when both are blank inside the testing environment', function (): void {
+        config(['shopify-app.api_key' => '', 'shopify-app.api_secret' => '']);
+
+        $provider = new AppServiceProvider(app());
+
+        expect(fn () => $provider->boot())->not->toThrow(RuntimeException::class);
+    });
 });

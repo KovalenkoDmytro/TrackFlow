@@ -29,7 +29,7 @@ describe('GET /api/settings/ga4 — credential write-only response', function ()
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/settings/ga4');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/ga4');
 
         $response->assertOk();
 
@@ -69,7 +69,7 @@ describe('GET /api/settings/ga4 — credential write-only response', function ()
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/settings/ga4');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/ga4');
 
         $response->assertOk();
         $response->assertJson([
@@ -90,7 +90,7 @@ describe('POST /api/settings/ga4 — write-only update semantics', function (): 
             'https://www.google-analytics.com/debug/mp/collect*' => Http::response(['validationMessages' => []], 200),
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/ga4', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/ga4', [
             'measurement_id' => 'G-ABC123',
             'api_secret' => 'api-secret-value',
             'property_id' => '123456789',
@@ -130,7 +130,7 @@ describe('POST /api/settings/ga4 — write-only update semantics', function (): 
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/ga4', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/ga4', [
             'measurement_id' => 'G-ABC123',
             'api_secret' => 'new-api-secret',
             'property_id' => '123456789',
@@ -181,7 +181,7 @@ describe('POST /api/settings/ga4 — write-only update semantics', function (): 
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/ga4', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/ga4', [
             'measurement_id' => 'G-ABC123',
             'api_secret' => 'new-api-secret',
             'property_id' => '123456789',

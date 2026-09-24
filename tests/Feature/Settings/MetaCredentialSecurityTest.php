@@ -24,7 +24,7 @@ describe('GET /api/settings/meta — credential write-only response', function (
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/settings/meta');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/meta');
 
         $response->assertOk();
 
@@ -47,7 +47,7 @@ describe('POST /api/settings/meta — write-only update semantics', function ():
     it('rejects first-time connection attempts missing the access token', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/meta', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/meta', [
             'pixel_id' => '1234567890',
             'access_token' => '',
         ]);
@@ -76,7 +76,7 @@ describe('POST /api/settings/meta — write-only update semantics', function ():
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/meta', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/meta', [
             'pixel_id' => '1234567891',
             'access_token' => '',
         ]);
@@ -114,7 +114,7 @@ describe('POST /api/settings/meta — write-only update semantics', function ():
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/meta', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/meta', [
             'pixel_id' => '1234567890',
             'access_token' => 'brand-new-access-token',
         ]);

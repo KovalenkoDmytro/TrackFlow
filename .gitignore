@@ -29,3 +29,6 @@ Homestead.yaml
 Thumbs.db
 .shopify
 .claude
+/trackflow
+*.sqlite
+*.sqlite-journal

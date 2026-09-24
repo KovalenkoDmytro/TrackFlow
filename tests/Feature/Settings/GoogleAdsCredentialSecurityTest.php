@@ -29,7 +29,7 @@ describe('GET /api/settings/google-ads — credential write-only response', func
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/settings/google-ads');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/google-ads');
 
         $response->assertOk();
 
@@ -63,7 +63,7 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
     it('rejects first-time connection attempts missing required sensitive fields', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/google-ads', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/google-ads', [
             'customer_id' => '123-456-7890',
             'developer_token' => '',
             'oauth_client_id' => '',
@@ -101,7 +101,7 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/google-ads', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/google-ads', [
             'customer_id' => '123-456-7891',
             'developer_token' => '',
             'oauth_client_id' => '',
@@ -151,7 +151,7 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
             'settings' => [],
         ]);
 
-        $response = $this->actingAs($shop)->postJson('/api/settings/google-ads', [
+        $response = $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/google-ads', [
             'customer_id' => '123-456-7890',
             'developer_token' => 'brand-new-developer-token',
             'oauth_client_id' => '',

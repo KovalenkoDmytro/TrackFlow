@@ -5,32 +5,38 @@ declare(strict_types=1);
 use App\Models\User;
 use Gnikyt\BasicShopifyAPI\BasicShopifyAPI;
 use Gnikyt\BasicShopifyAPI\ResponseAccess;
+use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
 
 /**
- * Mocks the Shopify Admin GraphQL client on a real User (shop) instance.
+ * Mocks the Shopify Admin GraphQL client for the shop under test.
  *
- * `Mockery::mock($shop)->makePartial()` returns an "instance mock" — a partial
- * mock that wraps the existing Eloquent instance. Every method that is not
- * explicitly stubbed (attribute access, save(), etc.) is forwarded to the real
- * object, so DB state changes made by the Action under test are observable
- * via fresh queries. Only `api()` is stubbed to avoid any real HTTP call to
- * Shopify's Admin API.
+ * Session-token auth resolves the shop via a fresh DB query inside
+ * App\Http\Middleware\AuthenticateShopifySessionToken, so the User instance
+ * the controller sees under `$request->user()` is never the same PHP object
+ * returned from this helper — mocking `api()` on a specific instance (as a
+ * partial instance mock) would silently no-op. Instead this fakes the
+ * `IApiHelper` container binding itself: `ShopModel::api()` always resolves
+ * `IApiHelper` fresh from the container, so any User instance's `api()` call
+ * reaches this same fake `BasicShopifyAPI`, avoiding any real HTTP call to
+ * Shopify's Admin API regardless of which instance ends up authenticated.
  */
 function shopWithFakeApi(array $attributes, BasicShopifyAPI $apiMock): User
 {
-    $shop = User::factory()->create($attributes);
+    $fakeApiHelper = Mockery::mock(IApiHelper::class);
+    $fakeApiHelper->shouldReceive('make')->andReturnSelf();
+    $fakeApiHelper->shouldReceive('getApi')->andReturn($apiMock);
 
-    $mock = Mockery::mock($shop)->makePartial();
-    $mock->shouldReceive('api')->andReturn($apiMock);
+    app()->instance(IApiHelper::class, $fakeApiHelper);
 
-    return $mock;
+    return User::factory()->create($attributes);
 }
 
 describe('PUT /api/pixel', function (): void {
-    it('returns 401 or 302 for unauthenticated requests', function (): void {
+    it('returns 401 for unauthenticated requests', function (): void {
         $response = $this->putJson('/api/pixel', ['enabled' => true]);
 
-        expect($response->status())->toBeIn([401, 302]);
+        $response->assertUnauthorized();
+        $response->assertHeader('X-Shopify-Retry-Invalid-Session-Request', '1');
     });
 
     it('enables the pixel: calls webPixelCreate, persists state, returns 200', function (): void {
@@ -55,7 +61,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
         $response->assertOk();
         $response->assertJson([
@@ -90,7 +96,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
         $response->assertOk();
         $response->assertJson([
@@ -124,7 +130,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => false]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => false]);
 
         $response->assertOk();
         $response->assertJson([
@@ -160,7 +166,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
         $response->assertStatus(422);
         $response->assertJsonStructure(['message']);
@@ -193,7 +199,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => false]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => false]);
 
         $response->assertStatus(422);
         $response->assertJsonStructure(['message']);
@@ -223,7 +229,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
         $response->assertStatus(422);
         $response->assertJsonStructure(['message']);
@@ -254,7 +260,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => false]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => false]);
 
         $response->assertStatus(422);
         $response->assertJsonStructure(['message']);
@@ -289,7 +295,7 @@ describe('PUT /api/pixel', function (): void {
             'tracking_secret' => 'super-secret',
         ], $apiMock);
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
         $response->assertStatus(422);
         $response->assertJsonStructure(['message']);
@@ -338,7 +344,7 @@ describe('PUT /api/pixel', function (): void {
                 'tracking_secret' => 'super-secret',
             ], $apiMock);
 
-            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+            $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
             $response->assertOk();
             $response->assertJson([
@@ -374,7 +380,7 @@ describe('PUT /api/pixel', function (): void {
                 'tracking_secret' => 'super-secret',
             ], $apiMock);
 
-            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+            $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
             $response->assertOk();
             $response->assertJson([
@@ -409,7 +415,7 @@ describe('PUT /api/pixel', function (): void {
                 'tracking_secret' => 'super-secret',
             ], $apiMock);
 
-            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => false]);
+            $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => false]);
 
             $response->assertOk();
             $response->assertJson([
@@ -447,7 +453,7 @@ describe('PUT /api/pixel', function (): void {
                 'tracking_secret' => 'super-secret',
             ], $apiMock);
 
-            $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => true]);
+            $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => true]);
 
             $response->assertStatus(422);
             $response->assertJsonStructure(['message']);
@@ -461,7 +467,7 @@ describe('PUT /api/pixel', function (): void {
     it('returns 422 when the enabled field is missing', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', []);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', []);
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['enabled']);
@@ -470,7 +476,7 @@ describe('PUT /api/pixel', function (): void {
     it('returns 422 when the enabled field is not a boolean', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->putJson('/api/pixel', ['enabled' => 'not-a-boolean']);
+        $response = $this->withToken($this->shopifySessionToken($shop))->putJson('/api/pixel', ['enabled' => 'not-a-boolean']);
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['enabled']);
