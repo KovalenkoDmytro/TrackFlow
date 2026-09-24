@@ -159,6 +159,9 @@ final class VerifyShopifyEmbeddedLaunch
             $target .= '?'.http_build_query($query);
         }
 
-        return redirect()->route('shopify.session-token-bounce', ['shopify-reload' => $target]);
+        return redirect()->route('shopify.session-token-bounce', [
+            'shopify-reload' => $target,
+            'host' => $request->query('host'),
+        ]);
     }
 }
