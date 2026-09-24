@@ -1,3 +1,4 @@
+import { EventDescription } from '../../../components/ui/EventDescription';
 import { useMemo, useState } from 'react';
 import { Box, CircularProgress, Table, TableBody, TableCell, TableContainer, TableFooter, TableHead, TableRow, TableSortLabel, Typography } from '@mui/material';
 import type { EventCount } from '../../../types/api';
@@ -34,7 +35,7 @@ export function EventCountsTable({ counts, total, loading }: EventCountsTablePro
         {rows.length === 0 ? <TableRow><TableCell colSpan={2} sx={{ py: 5, textAlign: 'center' }}><Typography variant="body2" color="text.secondary">No events found for this date.</Typography></TableCell></TableRow> : rows.map((row) => {
           const share = total ? Math.round((row.count / total) * 100) : 0;
           return <TableRow key={row.event} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-            <TableCell sx={{ py: 1.5 }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}><Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: row.count ? 'primary.main' : '#c9cdda', flexShrink: 0 }} /><Typography variant="body2" sx={{ fontWeight: 550 }} color={row.count === 0 ? 'text.secondary' : 'text.primary'}>{row.label}</Typography></Box></TableCell>
+            <TableCell sx={{ py: 1.5 }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}><Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: row.count ? 'primary.main' : '#c9cdda', flexShrink: 0 }} /><Box><Typography variant="body2" sx={{ fontWeight: 550 }} color={row.count === 0 ? 'text.secondary' : 'text.primary'}>{row.label}</Typography><EventDescription event={row.event} /></Box></Box></TableCell>
             <TableCell align="right"><Box sx={{ display: 'inline-flex', minWidth: 100, alignItems: 'center', justifyContent: 'flex-end', gap: 1.25 }}><Box sx={{ width: 56, height: 5, borderRadius: 9, bgcolor: '#eceef5', overflow: 'hidden' }}><Box sx={{ width: `${share}%`, height: '100%', borderRadius: 9, bgcolor: 'primary.main', opacity: row.count ? .8 : .2 }} /></Box><Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right', fontWeight: 650, fontVariantNumeric: 'tabular-nums' }} color={row.count === 0 ? 'text.disabled' : 'text.primary'}>{row.count.toLocaleString()}</Typography></Box></TableCell>
           </TableRow>;
         })}

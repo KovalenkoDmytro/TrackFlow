@@ -1,3 +1,4 @@
+import { EventDescription } from '../../../components/ui/EventDescription';
 // resources/js/features/settings/google-ads/GoogleAdsForm.tsx
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -266,7 +267,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
               <TableBody>
                 {mappings.map((mapping) => (
                   <TableRow key={mapping.id}>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>{mapping.event}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{mapping.event}</Typography>
+                      <EventDescription event={mapping.event} />
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={mapping.active ? 'Active' : 'Inactive'}
