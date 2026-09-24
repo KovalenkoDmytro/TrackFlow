@@ -25,8 +25,8 @@ export function EventCountsTable({ counts, total, loading }: EventCountsTablePro
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} /></Box>;
 
-  return <TableContainer sx={{ maxHeight: 520 }}>
-    <Table size="small" stickyHeader>
+  return <TableContainer>
+    <Table size="small">
       <TableHead><TableRow>
         <TableCell sx={{ bgcolor: '#f8f9fc', fontWeight: 700 }}><TableSortLabel active={sortBy === 'event'} direction={sortBy === 'event' ? sortDirection : 'asc'} onClick={() => requestSort('event')}>Event</TableSortLabel></TableCell>
         <TableCell align="right" sx={{ bgcolor: '#f8f9fc', fontWeight: 700, width: 180 }}><TableSortLabel active={sortBy === 'count'} direction={sortBy === 'count' ? sortDirection : 'desc'} onClick={() => requestSort('count')}>Events</TableSortLabel></TableCell>
