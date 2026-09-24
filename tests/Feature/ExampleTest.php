@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,8 +16,9 @@ class ExampleTest extends TestCase
      */
     public function test_the_application_returns_a_successful_response(): void
     {
-        // The homepage requires a Shopify authentication middleware (verify.shopify).
-        // If not authenticated, the app redirects to the authentication flow.
+        // The homepage requires Shopify embedded-launch verification
+        // (App\Http\Middleware\VerifyShopifyEmbeddedLaunch). Unverified
+        // requests are redirected to the session-token bounce page.
         $response = $this->get('/');
 
         $response->assertStatus(302);

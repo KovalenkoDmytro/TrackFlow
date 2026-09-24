@@ -5,10 +5,11 @@ declare(strict_types=1);
 use App\Models\User;
 
 describe('GET /api/shop-status', function (): void {
-    it('returns 401 or 302 for unauthenticated requests', function (): void {
+    it('returns 401 for unauthenticated requests', function (): void {
         $response = $this->getJson('/api/shop-status');
 
-        expect($response->status())->toBeIn([401, 302]);
+        $response->assertUnauthorized();
+        $response->assertHeader('X-Shopify-Retry-Invalid-Session-Request', '1');
     });
 
     it('returns pixel_enabled=true when the shop has enabled the pixel', function (): void {
@@ -17,7 +18,7 @@ describe('GET /api/shop-status', function (): void {
             'shopify_pixel_id' => 'gid://shopify/WebPixel/123',
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/shop-status');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/shop-status');
 
         $response->assertOk();
         $response->assertJson([
@@ -35,7 +36,7 @@ describe('GET /api/shop-status', function (): void {
             'shopify_pixel_id' => null,
         ]);
 
-        $response = $this->actingAs($shop)->getJson('/api/shop-status');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/shop-status');
 
         $response->assertOk();
         $response->assertJson([

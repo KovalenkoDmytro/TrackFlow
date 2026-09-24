@@ -77,7 +77,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         [$purchaseEvent4] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-03 13:00:00');
         createMetaDelivery($purchaseEvent4, $integration, 'queued', '2026-05-03 13:00:05');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -107,7 +107,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
     it('zero-fills all 9 canonical event types even with no deliveries', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -139,7 +139,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         [$event2] = createMetaTrackingEvent($shop, TrackingEventType::AddToCart, '2026-05-03 15:00:00');
         createMetaDelivery($event2, $integration, 'partial_failure', '2026-05-03 15:00:05', 'Most recent error message');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -155,7 +155,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         [$eventB, $integrationB] = createMetaTrackingEvent($shopB, TrackingEventType::Purchase, '2026-05-03 10:00:00');
         createMetaDelivery($eventB, $integrationB, 'delivered', '2026-05-03 10:00:05');
 
-        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
+        $response = $this->withToken($this->shopifySessionToken($shopA))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -180,7 +180,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
         [$eventOutsidePeriod] = createMetaTrackingEvent($shop, TrackingEventType::Purchase, '2026-05-04 00:00:30');
         createMetaDelivery($eventOutsidePeriod, $integration, 'delivered', '2026-05-03 23:59:50');
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=meta');
 
         $response->assertOk();
 
@@ -195,7 +195,7 @@ describe('GET /api/analytics?platform=meta — delivery stats', function (): voi
 
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 10:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=ga4');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03&platform=ga4');
 
         $response->assertOk();
 

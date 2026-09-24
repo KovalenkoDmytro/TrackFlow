@@ -9,11 +9,12 @@ use App\Http\Controllers\Api\MetaApiController;
 use App\Http\Controllers\Api\PixelApiController;
 use App\Http\Controllers\Api\ShopStatusController;
 use App\Http\Controllers\ConversionController;
+use App\Http\Middleware\AuthenticateShopifySessionToken;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/conversions', [ConversionController::class, 'track']);
 
-Route::middleware(['auth:web'])->group(function (): void {
+Route::middleware([AuthenticateShopifySessionToken::class])->group(function (): void {
     Route::get('/shop-status', [ShopStatusController::class, 'index']);
     Route::get('/analytics', [AnalyticsController::class, 'index']);
 

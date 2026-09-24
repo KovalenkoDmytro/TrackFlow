@@ -19,16 +19,17 @@ describe('GET /api/analytics', function (): void {
         $this->travelBack();
     });
 
-    it('returns 401 or 302 for unauthenticated requests', function (): void {
+    it('returns 401 for unauthenticated requests', function (): void {
         $response = $this->getJson('/api/analytics');
 
-        expect($response->status())->toBeIn([401, 302]);
+        $response->assertUnauthorized();
+        $response->assertHeader('X-Shopify-Retry-Invalid-Session-Request', '1');
     });
 
     it('returns 200 with today data when authenticated and no params provided', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics');
 
         $response->assertOk();
 
@@ -51,7 +52,7 @@ describe('GET /api/analytics', function (): void {
 
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 10:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
@@ -75,7 +76,7 @@ describe('GET /api/analytics', function (): void {
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::AddToCart)->occurredAt('2026-05-03 14:00:00')->create();
         TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::ViewItem)->occurredAt('2026-05-05 09:00:00')->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-05-03&end_date=2026-05-07');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=range&start_date=2026-05-03&end_date=2026-05-07');
 
         $response->assertOk();
 
@@ -93,7 +94,7 @@ describe('GET /api/analytics', function (): void {
     it('returns 422 when end_date is before start_date', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-05-10&end_date=2026-05-01');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=range&start_date=2026-05-10&end_date=2026-05-01');
 
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors(['end_date']);
@@ -106,7 +107,7 @@ describe('GET /api/analytics', function (): void {
         TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::Purchase)->occurredAt('2026-05-03 12:00:00')->create();
         TrackingEvent::factory()->forUser($shopB)->forEvent(TrackingEventType::AddToCart)->occurredAt('2026-05-03 13:00:00')->create();
 
-        $response = $this->actingAs($shopA)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
+        $response = $this->withToken($this->shopifySessionToken($shopA))->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
@@ -120,7 +121,7 @@ describe('GET /api/analytics', function (): void {
     it('response summary.counts contains all 9 canonical event types', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-03');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-03');
 
         $response->assertOk();
 
@@ -133,7 +134,7 @@ describe('GET /api/analytics', function (): void {
     it('meta contains available_events with all 9 types and correct max_range_days', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics');
 
         $response->assertOk();
 
@@ -146,7 +147,7 @@ describe('GET /api/analytics', function (): void {
     it('rejects dates older than the retention window', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=single_day&date=2026-05-01');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=single_day&date=2026-05-01');
 
         $response->assertUnprocessable()->assertJsonValidationErrors(['date']);
     });
@@ -154,7 +155,7 @@ describe('GET /api/analytics', function (): void {
     it('rejects future dates', function (): void {
         $shop = User::factory()->create();
 
-        $response = $this->actingAs($shop)->getJson('/api/analytics?mode=range&start_date=2026-07-31&end_date=2026-08-01');
+        $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?mode=range&start_date=2026-07-31&end_date=2026-08-01');
 
         $response->assertUnprocessable()->assertJsonValidationErrors(['end_date']);
     });

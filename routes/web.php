@@ -7,9 +7,16 @@ use App\Actions\Webhooks\CustomersDataRequestWebhook;
 use App\Actions\Webhooks\CustomersRedactWebhook;
 use App\Actions\Webhooks\ShopRedactWebhook;
 use App\Http\Middleware\DevShopAuth;
+use App\Http\Middleware\VerifyShopifyEmbeddedLaunch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Osiset\ShopifyApp\Http\Controllers\WebhookController;
+
+// Never placed behind VerifyShopifyEmbeddedLaunch: it is the redirect target
+// that middleware sends unauthenticated embedded launches to, so gating it
+// the same way would create a redirect loop.
+Route::get('/shopify/session-token-bounce', fn () => view('shopify.session-token-bounce'))
+    ->name('shopify.session-token-bounce');
 
 // App\Providers\AppServiceProvider::excludeAuthenticateFromVendorRoutes()
 // force-adds "authenticate" to shopify-app.manual_routes during the
@@ -37,7 +44,7 @@ if (app()->isLocal()) {
     });
 } else {
     // Production: every route is protected by Shopify's embedded-app auth.
-    Route::middleware(['verify.shopify'])->group(function (): void {
+    Route::middleware([VerifyShopifyEmbeddedLaunch::class])->group(function (): void {
         // All app routes are handled client-side by React Router.
         // Laravel serves the SPA entry point for every path so that direct URL
         // navigation and Shopify iframe deep-links resolve correctly.
