@@ -1,3 +1,4 @@
+import { EventDescription } from '../../../components/ui/EventDescription';
 // resources/js/features/analytics/components/PlatformDeliveryTable.tsx
 import {
   Alert,
@@ -58,6 +59,7 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
                 <Typography variant="body2" color={row.attempted === 0 ? 'text.disabled' : 'text.primary'}>
                   {row.label}
                 </Typography>
+                <EventDescription event={row.event} />
               </TableCell>
               <TableCell align="right">
                 <Typography
