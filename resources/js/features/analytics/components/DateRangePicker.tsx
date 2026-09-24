@@ -43,9 +43,11 @@ export function DateRangePicker({ startDate, endDate, onApply, retentionDays }: 
   const [error, setError] = useState('');
   const today = startOfToday();
   const earliest = dateDaysAgo(retentionDays);
-  const rangeLabel = range?.from
-    ? `${displayDate(isoDate(range.from))} – ${range.to ? displayDate(isoDate(range.to)) : 'Select end date'}`
-    : 'Choose date range';
+  const rangeLabel = `${displayDate(startDate)} – ${displayDate(endDate)}`;
+  const presets = [
+    { label: 'This week', days: (today.getDay() + 6) % 7 + 1 },
+    ...[7, 30, 90].map((days) => ({ label: `Last ${days} days`, days })),
+  ].filter(({ days }) => days <= retentionDays);
 
   function choosePreset(days: number) {
     const to = startOfToday();
@@ -53,6 +55,8 @@ export function DateRangePicker({ startDate, endDate, onApply, retentionDays }: 
     from.setDate(from.getDate() - Math.min(days - 1, retentionDays - 1));
     setRange({ from, to });
     setError('');
+    onApply(isoDate(from), isoDate(to));
+    setAnchor(null);
   }
 
   function applyRange() {
@@ -71,17 +75,23 @@ export function DateRangePicker({ startDate, endDate, onApply, retentionDays }: 
 
   return <>
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
-      <Button variant="outlined" startIcon={<CalendarMonthRoundedIcon />} onClick={(event) => setAnchor(event.currentTarget)} sx={{ justifyContent: 'flex-start', minWidth: { sm: 260 } }}>
+      <Button variant="outlined" startIcon={<CalendarMonthRoundedIcon />} onClick={(event) => {
+        setRange({ from: fromIso(startDate), to: fromIso(endDate) });
+        setError('');
+        setAnchor(event.currentTarget);
+      }} sx={{ justifyContent: 'flex-start', minWidth: { sm: 260 } }}>
         {rangeLabel}
       </Button>
-      <Typography variant="caption" color="text.secondary">Select a preset or choose dates</Typography>
+      <Box role="group" aria-label="Date range presets" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        {presets.map(({ label, days }) => {
+          const selected = startDate === isoDate(dateDaysAgo(days - 1)) && endDate === isoDate(today);
+          return <Button key={label} size="small" variant={selected ? 'contained' : 'outlined'} aria-pressed={selected} onClick={() => choosePreset(days)}>{label}</Button>;
+        })}
+      </Box>
     </Stack>
     <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} transformOrigin={{ vertical: 'top', horizontal: 'left' }} slotProps={{ paper: { sx: { maxWidth: 'calc(100vw - 24px)' } } }}>
       <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Date range</Typography>
-        <Stack direction="row" spacing={.75} sx={{ mb: 1, flexWrap: 'wrap', rowGap: .75 }}>
-          {[7, 30, 90].filter((days) => days <= retentionDays).map((days) => <Button key={days} size="small" variant="text" onClick={() => choosePreset(days)}>Last {days} days</Button>)}
-        </Stack>
         <DayPicker
           className="trackflow-calendar"
           mode="range"

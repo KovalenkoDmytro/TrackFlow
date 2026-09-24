@@ -29,11 +29,13 @@ interface DayNavigatorProps {
 
 export function DayNavigator({ date, onChange, retentionDays }: DayNavigatorProps) {
   const today = localDateString();
+  const yesterday = dateDaysAgo(1);
   const earliestDate = dateDaysAgo(retentionDays);
   const isToday = date === today;
+  const isYesterday = date === yesterday;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
       <Button size="small" variant="outlined" onClick={() => onChange(shiftDate(date, -1))} disabled={date <= earliestDate}>
         ← Prev
       </Button>
@@ -53,6 +55,15 @@ export function DayNavigator({ date, onChange, retentionDays }: DayNavigatorProp
         disabled={isToday}
       >
         Today
+      </Button>
+      <Button
+        size="small"
+        variant={isYesterday ? 'contained' : 'outlined'}
+        aria-pressed={isYesterday}
+        onClick={() => onChange(yesterday)}
+        disabled={isYesterday || yesterday < earliestDate}
+      >
+        Yesterday
       </Button>
     </Box>
   );
