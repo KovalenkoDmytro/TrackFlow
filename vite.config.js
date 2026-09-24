@@ -11,6 +11,7 @@ export default defineConfig({
         react(),
     ],
     server: {
+        host: '0.0.0.0',
         proxy: {
             '/api': {
                 target: 'http://localhost:8000',
@@ -23,6 +24,10 @@ export default defineConfig({
         },
         watch: {
             ignored: ['**/storage/framework/views/**'],
+        },
+        hmr: {
+            host: 'localhost',
+            port: 5173,
         },
     },
 });
