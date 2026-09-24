@@ -1,0 +1,108 @@
+services:
+  vite:
+    image: node:22-alpine
+    container_name: trackflow-vite
+    working_dir: /app
+    command: >
+      sh -c "npm ci
+      && echo 'http://localhost:5173' > ./public/hot
+      && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - .:/app
+      - vite_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      VITE_HMR_HOST: localhost
+      VITE_HMR_PORT: 5173
+    profiles:
+      - dev
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trackflow-app
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      APP_DEBUG: 'true'
+      OCTANE_HOST: 0.0.0.0
+      OCTANE_PORT: 8000
+      OCTANE_WORKERS: 4
+      OCTANE_MAX_REQUESTS: 500
+      # Database (MySQL — matches project's actual configuration)
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: trackflow
+      DB_USERNAME: trackflow
+      DB_PASSWORD: trackflow_password
+      # Shopify API credentials (required for local development)
+      # For tests: phpunit.xml provides test-specific values via force="true"
+      # For local dev: set non-empty values in .env or via shell env vars
+      SHOPIFY_API_KEY: "${SHOPIFY_API_KEY:-docker-dummy-key}"
+      SHOPIFY_API_SECRET: "${SHOPIFY_API_SECRET:-docker-dummy-secret}"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - .:/app
+      - /app/vendor
+      - /app/node_modules
+      - /app/storage
+      - /app/public/build
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/up || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mysql:
+    image: mysql:8.0
+    container_name: trackflow-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-root_password}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-trackflow}"
+      MYSQL_USER: "${MYSQL_USER:-trackflow}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-trackflow_password}"
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: trackflow-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mysql_data:
+    driver: local
+  vite_node_modules:
+    driver: local
