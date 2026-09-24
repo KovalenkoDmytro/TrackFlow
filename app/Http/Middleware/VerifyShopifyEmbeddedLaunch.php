@@ -159,10 +159,20 @@ final class VerifyShopifyEmbeddedLaunch
             $target .= '?'.http_build_query($query);
         }
 
+        $shopDomain = $request->query('shop');
+
+        if (! $shopDomain && $host = $request->query('host')) {
+            $decodedHost = base64_decode($host, true) ?: '';
+
+            if (preg_match('#/store/([a-z0-9\-]+)#i', $decodedHost, $matches)) {
+                $shopDomain = $matches[1].'.myshopify.com';
+            }
+        }
+
         return redirect()->route('shopify.session-token-bounce', [
             'shopify-reload' => $target,
             'host' => $request->query('host'),
-            'shop' => $request->query('shop'),
+            'shop' => $shopDomain,
         ]);
     }
 }
