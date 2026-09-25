@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Analytics\GetEventCountsForPeriod;
+use App\Actions\Analytics\GetGoogleAdsAttribution;
 use App\Actions\Analytics\GetPlatformDeliveryStatsForPeriod;
 use App\Enums\TrackingEventType;
 use App\Http\Controllers\Controller;
@@ -76,6 +77,14 @@ final class AnalyticsController extends Controller
             'earliest_date' => $today->subDays($retentionDays)->toDateString(),
             'today' => $today->toDateString(),
         ];
+
+        if ($platform === 'google_ads') {
+            return response()->json([
+                'filters' => $filters,
+                'summary' => ['period' => $period, ...app(GetGoogleAdsAttribution::class)->handle($shop, $start, $end)],
+                'meta' => $meta,
+            ]);
+        }
 
         if ($platform === 'meta') {
             $deliveryStats = $this->getPlatformDeliveryStats->handle($shop, $start, $end, $platform);

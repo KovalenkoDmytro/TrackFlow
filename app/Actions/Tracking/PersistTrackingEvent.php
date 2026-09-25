@@ -27,6 +27,11 @@ final class PersistTrackingEvent
      */
     public function handle(TrackingEventData $data, User $shop): TrackingEvent
     {
+        // TrackingEventData normalizes gclid (trims and collapses blank to
+        // null) at construction, matching GetGoogleAdsAttribution's
+        // TRIM(gclid) <> '' match condition and GoogleAdsClickSync's stored
+        // click hashes — otherwise incidental whitespace prevents an
+        // otherwise-genuine gclid from ever matching.
         $attributes = [
             'user_id' => $shop->getKey(),
             'event' => $data->event,
@@ -34,6 +39,7 @@ final class PersistTrackingEvent
             'currency' => $data->currency,
             'transaction_id' => $data->transactionId,
             'gclid' => $data->gclid,
+            'gclid_hash' => $data->gclid !== null ? hash('sha256', $data->gclid) : null,
             'fbp' => $data->fbp,
             'fbc' => $data->fbc,
             'ttclid' => $data->ttclid,

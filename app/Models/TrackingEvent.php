@@ -32,6 +32,7 @@ final class TrackingEvent extends Model
         'currency',
         'transaction_id',
         'gclid',
+        'gclid_hash',
         'fbp',
         'fbc',
         'ttclid',

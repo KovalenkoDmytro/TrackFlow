@@ -9,6 +9,18 @@ register(({ analytics, browser, settings, init }) => {
   const STORAGE_TTCLID = "tf_ttclid";
   const STORAGE_FBCLID = "tf_fbclid";
 
+  let attributionQueue = Promise.resolve();
+  // Serialize attribution reads/writes so the landing click is available to the
+  // first product event and a later page cannot change an earlier event's ID.
+  function enqueueAttribution(url) {
+    const result = attributionQueue.then(async () => {
+      await captureClickIds(url);
+      return getAttribution();
+    });
+    attributionQueue = result.catch(() => {});
+    return result;
+  }
+
   async function getAttribution() {
     const [gclid, ttclid, fbclid, gaCookie, fbp, fbc] = await Promise.all([
       browser.sessionStorage.getItem(STORAGE_GCLID),
@@ -36,15 +48,15 @@ register(({ analytics, browser, settings, init }) => {
     };
   }
 
-  async function sendEvent(eventName, payload) {
-    const attribution = await getAttribution();
+  async function sendEvent(eventName, payload, event) {
+    const attribution = await enqueueAttribution(event?.context?.document?.location?.href);
 
     const body = {
       shop_domain: SHOP_DOMAIN,
       tracking_secret: TRACKING_SECRET,
       event: eventName,
-      idempotency_key: crypto.randomUUID(),
-      occurred_at: new Date().toISOString(),
+      idempotency_key: event?.id || crypto.randomUUID(),
+      occurred_at: event?.timestamp || new Date().toISOString(),
       ...attribution,
       ...payload,
     };
@@ -57,113 +69,115 @@ register(({ analytics, browser, settings, init }) => {
     }).catch(() => {});
   }
 
-  function captureClickIds(url) {
+  async function captureClickIds(url) {
     if (!url) return;
     try {
       const params = new URLSearchParams(new URL(url).search);
       const gclid = params.get("gclid");
       const ttclid = params.get("ttclid");
       const fbclid = params.get("fbclid");
-      if (gclid) browser.sessionStorage.setItem(STORAGE_GCLID, gclid);
-      if (ttclid) browser.sessionStorage.setItem(STORAGE_TTCLID, ttclid);
-      if (fbclid) browser.sessionStorage.setItem(STORAGE_FBCLID, fbclid);
+      if (gclid) await browser.sessionStorage.setItem(STORAGE_GCLID, gclid);
+      if (ttclid) await browser.sessionStorage.setItem(STORAGE_TTCLID, ttclid);
+      if (fbclid) await browser.sessionStorage.setItem(STORAGE_FBCLID, fbclid);
     } catch (_) {}
   }
 
+  enqueueAttribution(init.context?.document?.location?.href).catch(() => {});
+
   analytics.subscribe("page_viewed", (event) => {
-    captureClickIds(event.context?.document?.location?.href);
+    return enqueueAttribution(event.context?.document?.location?.href).catch(() => {});
   });
 
   analytics.subscribe("checkout_completed", (event) => {
     const checkout = event.data?.checkout;
-    sendEvent("purchase", {
+    return sendEvent("purchase", {
       value:
         checkout?.totalPrice?.amount != null
           ? parseFloat(checkout.totalPrice.amount)
           : null,
       currency: checkout?.currencyCode ?? null,
       transaction_id: checkout?.order?.id ?? checkout?.token ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("product_added_to_cart", (event) => {
     const line = event.data?.cartLine;
-    sendEvent("add_to_cart", {
+    return sendEvent("add_to_cart", {
       value:
         line?.cost?.totalAmount?.amount != null
           ? parseFloat(line.cost.totalAmount.amount)
           : null,
       currency: line?.cost?.totalAmount?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("checkout_started", (event) => {
     const checkout = event.data?.checkout;
-    sendEvent("begin_checkout", {
+    return sendEvent("begin_checkout", {
       value:
         checkout?.totalPrice?.amount != null
           ? parseFloat(checkout.totalPrice.amount)
           : null,
       currency: checkout?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("payment_info_submitted", (event) => {
     const checkout = event.data?.checkout;
-    sendEvent("add_payment_info", {
+    return sendEvent("add_payment_info", {
       value:
         checkout?.totalPrice?.amount != null
           ? parseFloat(checkout.totalPrice.amount)
           : null,
       currency: checkout?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("checkout_shipping_info_submitted", (event) => {
     const checkout = event.data?.checkout;
-    sendEvent("add_shipping_info", {
+    return sendEvent("add_shipping_info", {
       value:
         checkout?.totalPrice?.amount != null
           ? parseFloat(checkout.totalPrice.amount)
           : null,
       currency: checkout?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("product_viewed", (event) => {
     const variant = event.data?.productVariant;
-    sendEvent("view_item", {
+    return sendEvent("view_item", {
       value:
         variant?.price?.amount != null
           ? parseFloat(variant.price.amount)
           : null,
       currency: variant?.price?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
   analytics.subscribe("cart_viewed", (event) => {
     const cart = event.data?.cart;
-    sendEvent("view_cart", {
+    return sendEvent("view_cart", {
       value:
         cart?.cost?.totalAmount?.amount != null
           ? parseFloat(cart.cost.totalAmount.amount)
           : null,
       currency: cart?.cost?.totalAmount?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 
-  analytics.subscribe("search_submitted", (_event) => {
-    sendEvent("search", {});
+  analytics.subscribe("search_submitted", (event) => {
+    return sendEvent("search", {}, event).catch(() => {});
   });
 
   analytics.subscribe("product_removed_from_cart", (event) => {
     const line = event.data?.cartLine;
-    sendEvent("remove_from_cart", {
+    return sendEvent("remove_from_cart", {
       value:
         line?.cost?.totalAmount?.amount != null
           ? parseFloat(line.cost.totalAmount.amount)
           : null,
       currency: line?.cost?.totalAmount?.currencyCode ?? null,
-    });
+    }, event).catch(() => {});
   });
 });
