@@ -58,7 +58,6 @@ final class GoogleAdsController extends Controller
     {
         $validated = $request->validate([
             'customer_id' => ['required', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
-            'developer_token' => ['required', 'string', 'min:10'],
             'mcc_id' => ['nullable', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
             'oauth_client_id' => ['required', 'string'],
             'oauth_client_secret' => ['required', 'string'],
@@ -72,7 +71,6 @@ final class GoogleAdsController extends Controller
 
         $credentials = [
             'customer_id' => $customerId,
-            'developer_token' => $validated['developer_token'],
             'mcc_id' => $mccId,
             'oauth' => [
                 'client_id' => $validated['oauth_client_id'],

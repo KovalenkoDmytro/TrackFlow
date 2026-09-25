@@ -53,14 +53,12 @@ final class GoogleAdsApiController extends Controller
         $credentials = [
             'customer_id' => $raw['customer_id'] ?? '',
             'mcc_id' => $raw['mcc_id'] ?? '',
-            // Developer token and OAuth secrets are write-only: never echo the stored value back to the browser.
-            'developer_token' => '',
+            // OAuth secrets are write-only: never echo the stored value back to the browser.
             'oauth' => [
                 'client_id' => '',
                 'client_secret' => '',
                 'refresh_token' => '',
             ],
-            'has_developer_token' => ! empty($raw['developer_token'] ?? null),
             'has_oauth_client_id' => ! empty($raw['oauth']['client_id'] ?? null),
             'has_oauth_client_secret' => ! empty($raw['oauth']['client_secret'] ?? null),
             'has_oauth_refresh_token' => ! empty($raw['oauth']['refresh_token'] ?? null),
@@ -95,7 +93,6 @@ final class GoogleAdsApiController extends Controller
     {
         $validated = $request->validate([
             'customer_id' => ['required', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
-            'developer_token' => ['nullable', 'string'],
             'mcc_id' => ['nullable', 'string', 'regex:/^\d{3}-?\d{3}-?\d{4}$/'],
             'oauth_client_id' => ['nullable', 'string'],
             'oauth_client_secret' => ['nullable', 'string'],
@@ -116,20 +113,18 @@ final class GoogleAdsApiController extends Controller
         $customerId = str_replace('-', '', $validated['customer_id']);
         $mccId = ! empty($validated['mcc_id']) ? str_replace('-', '', $validated['mcc_id']) : null;
 
-        $developerToken = self::resolveSensitiveField($validated['developer_token'] ?? null, $existingRaw['developer_token'] ?? null);
         $clientId = self::resolveSensitiveField($validated['oauth_client_id'] ?? null, $existingOauth['client_id'] ?? null);
         $clientSecret = self::resolveSensitiveField($validated['oauth_client_secret'] ?? null, $existingOauth['client_secret'] ?? null);
         $refreshToken = self::resolveSensitiveField($validated['oauth_refresh_token'] ?? null, $existingOauth['refresh_token'] ?? null);
 
-        if ($existing === null && ($developerToken === '' || $clientId === '' || $clientSecret === '' || $refreshToken === '')) {
+        if ($clientId === '' || $clientSecret === '' || $refreshToken === '') {
             return response()->json([
-                'error' => 'Developer Token, OAuth Client ID, Client Secret, and Refresh Token are all required to connect Google Ads for the first time.',
+                'error' => 'OAuth Client ID, Client Secret, and Refresh Token are required to connect Google Ads.',
             ], 422);
         }
 
         $credentials = [
             'customer_id' => $customerId,
-            'developer_token' => $developerToken,
             'mcc_id' => $mccId,
             'oauth' => [
                 'client_id' => $clientId,

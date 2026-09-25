@@ -19,6 +19,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { GoogleCloudSetupGuide } from './components/GoogleCloudSetupGuide';
 import { PermissionTroubleshootingPanel } from './components/PermissionTroubleshootingPanel';
 import { useGoogleAdsSettings } from './hooks/useGoogleAdsSettings';
 import { ValidationError } from '../../../types/api';
@@ -27,7 +28,6 @@ import type { GoogleAdsFormData } from '../../../types/api';
 const schema = z.object({
   customer_id: z.string().min(1, 'Required'),
   mcc_id: z.string(),
-  developer_token: z.string(),
   oauth_client_id: z.string(),
   oauth_client_secret: z.string(),
   oauth_refresh_token: z.string(),
@@ -36,7 +36,6 @@ const schema = z.object({
 const EMPTY_FORM: GoogleAdsFormData = {
   customer_id: '',
   mcc_id: '',
-  developer_token: '',
   oauth_client_id: '',
   oauth_client_secret: '',
   oauth_refresh_token: '',
@@ -44,7 +43,7 @@ const EMPTY_FORM: GoogleAdsFormData = {
 
 function isPermissionError(message: string): boolean {
   const lower = message.toLowerCase();
-  return message.includes('403') || lower.includes('does not have permission');
+  return message.includes('403') || lower.includes('does not have permission') || lower.includes('cloud project') || lower.includes('action_not_permitted') || lower.includes('permission_denied');
 }
 
 interface GoogleAdsFormProps {
@@ -67,9 +66,8 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
       form.reset({
         customer_id: creds.customer_id ?? '',
         mcc_id: creds.mcc_id ?? '',
-        // Developer token and OAuth secrets are write-only — the API never returns
+        // OAuth secrets are write-only — the API never returns
         // the stored value, so these always start empty.
-        developer_token: '',
         oauth_client_id: '',
         oauth_client_secret: '',
         oauth_refresh_token: '',
@@ -78,7 +76,6 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
   }, [query.data, form]);
 
   const credentials = query.data?.credentials;
-  const hasDeveloperToken = credentials?.has_developer_token ?? false;
   const hasOauthClientId = credentials?.has_oauth_client_id ?? false;
   const hasOauthClientSecret = credentials?.has_oauth_client_secret ?? false;
   const hasOauthRefreshToken = credentials?.has_oauth_refresh_token ?? false;
@@ -125,6 +122,8 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
         </Alert>
       )}
 
+      <GoogleCloudSetupGuide connected={query.data?.integration?.active ?? false} />
+
       <Card variant="outlined">
         <CardContent>
           <Box
@@ -153,24 +152,6 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
                 "Leave blank if you don't use a manager account. If you do, this is your MCC's account ID, found the same way as Customer ID but for the manager account"
               }
               error={!!form.formState.errors.mcc_id}
-              fullWidth
-            />
-            <TextField
-              {...form.register('developer_token')}
-              type="password"
-              label={
-                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                  Developer Token
-                  {hasDeveloperToken && <Chip label="Set" color="success" size="small" sx={{ height: 18 }} />}
-                </Box>
-              }
-              helperText={
-                form.formState.errors.developer_token?.message ??
-                (hasDeveloperToken
-                  ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
-                  : 'From Google Ads → Tools & Settings → Setup → API Center')
-              }
-              error={!!form.formState.errors.developer_token}
               fullWidth
             />
             <TextField

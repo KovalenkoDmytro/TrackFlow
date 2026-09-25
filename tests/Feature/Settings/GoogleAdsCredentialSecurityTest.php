@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Actions\GoogleAds\CreateConversionActions;
 use App\Enums\Platform;
 use App\Models\PlatformIntegration;
 use App\Models\User;
@@ -31,7 +32,7 @@ describe('GET /api/settings/google-ads — credential write-only response', func
 
         $response = $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/google-ads');
 
-        $response->assertOk();
+        $response->assertOk()->assertJsonMissingPath('credentials.developer_token')->assertJsonMissingPath('credentials.has_developer_token');
 
         $body = $response->getContent();
 
@@ -44,13 +45,11 @@ describe('GET /api/settings/google-ads — credential write-only response', func
         $response->assertJson([
             'credentials' => [
                 'customer_id' => '1234567890',
-                'developer_token' => '',
                 'oauth' => [
                     'client_id' => '',
                     'client_secret' => '',
                     'refresh_token' => '',
                 ],
-                'has_developer_token' => true,
                 'has_oauth_client_id' => true,
                 'has_oauth_client_secret' => true,
                 'has_oauth_refresh_token' => true,
@@ -75,7 +74,7 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
         expect(PlatformIntegration::query()->where('platform', Platform::GoogleAds)->exists())->toBeFalse();
     });
 
-    it('preserves the existing stored developer token and oauth secrets when resaving with blank fields', function (): void {
+    it('preserves OAuth secrets and drops the retired token when resaving with blank fields', function (): void {
         $shop = User::factory()->create();
         Queue::fake();
 
@@ -119,13 +118,13 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
         $stored = json_decode($integration->credentials, true);
 
         expect($stored['customer_id'])->toBe('1234567891')
-            ->and($stored['developer_token'])->toBe('original-developer-token')
+            ->and($stored)->not->toHaveKey('developer_token')
             ->and($stored['oauth']['client_id'])->toBe('original-client-id')
             ->and($stored['oauth']['client_secret'])->toBe('original-client-secret')
             ->and($stored['oauth']['refresh_token'])->toBe('original-refresh-token');
     });
 
-    it('replaces the stored developer token when a new value is submitted', function (): void {
+    it('ignores retired developer tokens submitted by older clients', function (): void {
         $shop = User::factory()->create();
         Queue::fake();
 
@@ -168,6 +167,31 @@ describe('POST /api/settings/google-ads — write-only update semantics', functi
 
         $stored = json_decode($integration->credentials, true);
 
-        expect($stored['developer_token'])->toBe('brand-new-developer-token');
+        expect($stored)->not->toHaveKey('developer_token');
+        Http::assertNotSent(fn ($request) => $request->hasHeader('developer-token'));
     });
+});
+
+it('connects Google Ads for the first time without a developer token', function (): void {
+    $shop = User::factory()->create();
+    Queue::fake();
+    Http::fake([
+        'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token']),
+        'https://googleads.googleapis.com/*' => Http::response(['results' => []]),
+    ]);
+
+    $this->withToken($this->shopifySessionToken($shop))->postJson('/api/settings/google-ads', [
+        'customer_id' => '123-456-7890',
+        'oauth_client_id' => 'client-id',
+        'oauth_client_secret' => 'client-secret',
+        'oauth_refresh_token' => 'refresh-token',
+    ])->assertOk();
+
+    $integration = $shop->platformIntegrations()->where('platform', Platform::GoogleAds)->firstOrFail();
+    expect(json_decode($integration->credentials, true))->not->toHaveKey('developer_token');
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'googleads.googleapis.com')
+        && $request->hasHeader('Authorization', 'Bearer fake-token')
+        && ! $request->hasHeader('developer-token')
+        && ! $request->hasHeader('login-customer-id'));
+    CreateConversionActions::assertPushed();
 });
