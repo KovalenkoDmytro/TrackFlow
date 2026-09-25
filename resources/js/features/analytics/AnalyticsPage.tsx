@@ -7,6 +7,7 @@ import { ModeToggle } from './components/ModeToggle';
 import { DayNavigator } from './components/DayNavigator';
 import { DateRangePicker } from './components/DateRangePicker';
 import { EventCountsTable } from './components/EventCountsTable';
+import { GoogleAdsAttributionTable } from './components/GoogleAdsAttributionTable';
 import { PlatformDeliveryTable } from './components/PlatformDeliveryTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import type { AnalyticsMode, AnalyticsParams, AnalyticsResponse, PlatformDeliveryResponse } from '../../types/api';
@@ -57,7 +58,7 @@ export function AnalyticsPage() {
   const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0 };
   const retentionDays = data?.meta?.retention_days ?? DEFAULT_RETENTION_DAYS;
 
-  const title = platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
+  const title = platform === 'google_ads' ? 'Google Ads click-matched events' : platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
 
   const actions = platform ? (
     <Button variant="text" size="small" href="/analytics">
@@ -100,7 +101,9 @@ export function AnalyticsPage() {
       </Card>
 
       <Card variant="outlined" sx={{ overflow: 'hidden' }}>
-        {isMeta ? (
+        {platform === 'google_ads' ? (
+          <GoogleAdsAttributionTable summary={eventCountsData?.summary} loading={isFetching} />
+        ) : isMeta ? (
           <PlatformDeliveryTable stats={deliveryStats} totals={deliveryTotals} loading={isFetching} />
         ) : (
           <EventCountsTable counts={counts} total={total} loading={isFetching} />

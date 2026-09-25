@@ -18,3 +18,8 @@ Schedule::command('shopify:detect-orphaned-shops')->daily();
 Schedule::command('tracking:prune')
     ->dailyAt('03:15')
     ->withoutOverlapping(180);
+
+// Recent reports are refreshed for reporting delays; daily reconciliation also
+// matches retained events collected before a shop connected its Ads account.
+Schedule::command('google-ads:sync-clicks --days=3')->hourly()->withoutOverlapping(120);
+Schedule::command('google-ads:sync-clicks --days=90')->dailyAt('04:15')->withoutOverlapping(180);

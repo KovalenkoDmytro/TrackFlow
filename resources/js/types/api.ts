@@ -26,6 +26,7 @@ export interface AnalyticsParams {
 }
 
 export interface EventCount {
+  unverified?: number;
   event: string;
   label: string;
   count: number;
@@ -37,6 +38,8 @@ export interface AnalyticsPeriod {
 }
 
 export interface AnalyticsSummary {
+  unverified_total?: number;
+  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number };
   counts: EventCount[];
   total: number;
   period: AnalyticsPeriod | null;

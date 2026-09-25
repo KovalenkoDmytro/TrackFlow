@@ -342,6 +342,43 @@ final class GoogleAdsClient implements ConversionPlatformContract
         return $headers;
     }
 
+    /** Read-only, paginated reporting shared by click matching and account timezone lookup. */
+    public function report(array $credentials, string $accessToken, string $query): array
+    {
+        $customerId = str_replace('-', '', $credentials['customer_id']);
+        if (! preg_match('/^\d{10}$/', $customerId)) {
+            throw new \RuntimeException('Invalid Google Ads Customer ID.');
+        }
+        $rows = [];
+        $pageToken = null;
+        $seenTokens = [];
+        do {
+            $body = ['query' => $query];
+            if ($pageToken !== null) {
+                $body['pageToken'] = $pageToken;
+            }
+            $response = Http::withHeaders($this->buildHeaders($accessToken, $credentials))
+                ->timeout(60)->post("https://googleads.googleapis.com/v24/customers/{$customerId}/googleAds:search", $body);
+            if (! $response->successful()) {
+                throw new \RuntimeException('Google Ads click report is unavailable. Check account access and try again.');
+            }
+            $payload = $response->json();
+            if (! is_array($payload) || ! is_array($payload['results'] ?? [])) {
+                throw new \RuntimeException('Google Ads returned an invalid click report.');
+            }
+            array_push($rows, ...($payload['results'] ?? []));
+            $pageToken = $payload['nextPageToken'] ?? null;
+            if ($pageToken && isset($seenTokens[$pageToken])) {
+                throw new \RuntimeException('Google Ads returned a repeated report page.');
+            }
+            if ($pageToken) {
+                $seenTokens[$pageToken] = true;
+            }
+        } while ($pageToken);
+
+        return $rows;
+    }
+
     /**
      * Extract a human-readable error message from a Google Ads API error response body.
      *
