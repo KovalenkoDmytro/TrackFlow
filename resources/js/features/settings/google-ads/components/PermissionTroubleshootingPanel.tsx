@@ -10,26 +10,17 @@ export function PermissionTroubleshootingPanel() {
       <Box component="ol" sx={{ pl: 2.5, m: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <Box component="li">
           <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-            Check your developer token access level
+            Check your Google Cloud project's API access
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Go to the{' '}
-            <Link href="https://ads.google.com/aw/apicenter" target="_blank" rel="noopener">
-              Google Ads API Center
+            Open the{' '}
+            <Link href="https://console.cloud.google.com/google-ads-apis/overview" target="_blank" rel="noopener">
+              Google Ads API Overview
             </Link>{' '}
-            and check your developer token status. If it shows <strong>Test Account</strong>, it can
-            only access special test accounts — not real Google Ads accounts.
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Apply for <strong>Standard Access</strong>, or create a{' '}
-            <Link
-              href="https://developers.google.com/google-ads/api/docs/first-call/test-accounts"
-              target="_blank"
-              rel="noopener"
-            >
-              test manager account
-            </Link>{' '}
-            and use its Customer ID instead.
+            in the project that owns your OAuth Client ID. Enable Google Ads API if needed.
+            If the access level is <strong>Test</strong>, open <strong>Upgrade access level</strong>
+            {' '}and apply for <strong>Explorer</strong> to connect a real advertising account.
+            Explorer, Basic and Standard access support production accounts.
           </Typography>
         </Box>
         <Box component="li">
@@ -37,9 +28,9 @@ export function PermissionTroubleshootingPanel() {
             Verify the OAuth account has access to the Customer ID
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            The Google account used to generate the OAuth Refresh Token must be an admin or user on
+            The Google account used to generate the OAuth Refresh Token must have Standard or Admin access to
             the Customer ID account. In Google Ads, go to{' '}
-            <strong>Settings → Account access</strong> and confirm the OAuth account email is listed
+            <strong>Admin → Access and security</strong> and confirm the OAuth account email is listed
             there.
           </Typography>
         </Box>

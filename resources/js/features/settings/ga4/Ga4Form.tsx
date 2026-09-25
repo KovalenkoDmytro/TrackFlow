@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Box, Button, Card, CardContent, Chip, TextField, Typography } from '@mui/material';
+import { Alert, AlertTitle, Box, Button, Card, CardContent, Chip, TextField, Typography } from '@mui/material';
+import { explainGa4ConnectionError } from './utils/connectionError';
+import { Ga4SetupGuide } from './components/Ga4SetupGuide';
 import { DisabledApiPanel } from './components/DisabledApiPanel';
 import { ScopeErrorPanel } from './components/ScopeErrorPanel';
 import { useGa4Settings } from './hooks/useGa4Settings';
@@ -42,16 +44,6 @@ function loadGa4Draft(): Partial<Pick<Ga4FormData, DraftField>> {
 
 function saveGa4Draft(values: Pick<Ga4FormData, DraftField>): void {
   localStorage.setItem(DRAFT_KEY, JSON.stringify(values));
-}
-
-function isScopeError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes('insufficient') || lower.includes('scopes');
-}
-
-function isApiDisabledError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes('analyticsadmin') || lower.includes('analytics admin api') || lower.includes('has not been used');
 }
 
 interface Ga4FormProps {
@@ -123,6 +115,8 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
     ? saveMutation.error.message
     : null;
 
+  const connectionError = apiError ? explainGa4ConnectionError(apiError) : null;
+
   const isConnected = query.data?.connected ?? false;
 
   return (
@@ -133,15 +127,28 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
         </Alert>
       )}
 
-      {apiError && (
+      {connectionError && (
         <Box sx={{ mb: 3 }}>
           <Alert severity="error" onClose={() => saveMutation.reset()}>
-            {apiError}
+            <AlertTitle>{connectionError.title}</AlertTitle>
+            <Typography variant="body2">{connectionError.message}</Typography>
+            <Box component="ol" sx={{ pl: 2.5, mb: 0 }}>
+              {connectionError.steps.map((step) => (
+                <Box component="li" key={step} sx={{ mt: 1 }}>{step}</Box>
+              ))}
+            </Box>
           </Alert>
-          {isScopeError(apiError) && <ScopeErrorPanel />}
-          {isApiDisabledError(apiError) && <DisabledApiPanel />}
+          {connectionError.help && (
+            <Box component="details" sx={{ mt: 2 }}>
+              <Box component="summary" sx={{ cursor: 'pointer' }}>Instructions for the person managing your Google connection</Box>
+              {connectionError.help === 'scope' && <ScopeErrorPanel />}
+              {connectionError.help === 'disabled-api' && <DisabledApiPanel />}
+            </Box>
+          )}
         </Box>
       )}
+
+      <Ga4SetupGuide connected={isConnected} />
 
       <Card variant="outlined">
         <CardContent>
@@ -174,7 +181,7 @@ export function Ga4Form({ onDisconnect, isDisconnecting }: Ga4FormProps) {
               required
             />
             <Typography variant="body2" color="text.secondary">
-              Optional: provide these to automatically create Key Events in your GA4 property.
+              Optional: provide Property ID and all three OAuth fields to automatically create Key Events. Follow steps 2–6 in the setup guide above.
             </Typography>
             <TextField
               {...form.register('property_id')}

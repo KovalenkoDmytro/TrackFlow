@@ -92,9 +92,7 @@ export interface GoogleAdsOAuth {
 export interface GoogleAdsCredentials {
   customer_id: string;
   mcc_id: string;
-  developer_token: string;
   oauth: GoogleAdsOAuth;
-  has_developer_token: boolean;
   has_oauth_client_id: boolean;
   has_oauth_client_secret: boolean;
   has_oauth_refresh_token: boolean;
@@ -124,7 +122,6 @@ export interface GoogleAdsSaveResponse {
 export interface GoogleAdsFormData {
   customer_id: string;
   mcc_id: string;
-  developer_token: string;
   oauth_client_id: string;
   oauth_client_secret: string;
   oauth_refresh_token: string;

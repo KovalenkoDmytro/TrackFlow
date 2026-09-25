@@ -64,17 +64,7 @@
                 @error('mcc_id') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
-            <div>
-                <label for="developer_token" class="block text-sm font-medium text-gray-700 mb-1">Developer Token</label>
-                <input
-                    type="text"
-                    id="developer_token"
-                    name="developer_token"
-                    value="{{ old('developer_token', $credentials['developer_token'] ?? '') }}"
-                    class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 @error('developer_token') border-red-400 @enderror"
-                >
-                @error('developer_token') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            </div>
+            <p class="text-sm text-gray-600">Enable Google Ads API in the Google Cloud project that owns your OAuth Client ID. In Google Ads API → Overview, check that the project has Explorer, Basic or Standard access for real advertising accounts. If it shows Test, apply for Explorer under Upgrade access level.</p>
 
             <div>
                 <label for="oauth_client_id" class="block text-sm font-medium text-gray-700 mb-1">OAuth Client ID</label>

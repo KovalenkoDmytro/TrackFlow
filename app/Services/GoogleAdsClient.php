@@ -73,7 +73,7 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * than discovering the problem when the first event fires.
      *
      * @param  array<string, mixed>  $credentials  Decrypted credentials from PlatformIntegration.
-     *                                             Expected keys: oauth (array), customer_id, developer_token, mcc_id (optional).
+     *                                             Expected keys: oauth (array), customer_id, mcc_id (optional).
      *
      * @throws \RuntimeException When the API responds with a non-2xx status.
      */
@@ -323,14 +323,13 @@ final class GoogleAdsClient implements ConversionPlatformContract
      * under an MCC hierarchy.
      *
      * @param  string  $accessToken  Short-lived OAuth access token.
-     * @param  array<string, mixed>  $credentials  Must contain developer_token; optionally mcc_id.
+     * @param  array<string, mixed>  $credentials  May contain mcc_id for manager-account access.
      * @return array<string, string>
      */
     private function buildHeaders(string $accessToken, array $credentials): array
     {
         $headers = [
             'Authorization' => "Bearer {$accessToken}",
-            'developer-token' => $credentials['developer_token'],
             'Content-Type' => 'application/json',
         ];
 
@@ -367,6 +366,27 @@ final class GoogleAdsClient implements ConversionPlatformContract
         $error = $responseBody['error'] ?? null;
 
         if (is_array($error)) {
+            // The top-level message is often just "permission denied". Google
+            // supplies the actionable authorization reason in nested details.
+            foreach ($error['details'] ?? [] as $detail) {
+                foreach ($detail['errors'] ?? [] as $adsError) {
+                    $reason = $adsError['errorCode']['authorizationError'] ?? null;
+
+                    if ($reason === 'CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION') {
+                        return 'Your Google Cloud project is not approved to connect real Google Ads accounts. '
+                            .'Ask the person managing your Google connection to open Google Ads API → Overview '
+                            .'in the project that owns your OAuth Client ID, then apply for Explorer access under Upgrade access level.';
+                    }
+
+                    if ($reason === 'ACTION_NOT_PERMITTED') {
+                        return 'Google did not allow this action. Check the Google Cloud project that owns your OAuth Client ID: '
+                            .'in Google Ads API → Overview, Test access only supports test accounts. '
+                            .'Apply for Explorer access to connect a real account. Also check that the Google account '
+                            .'used to authorize the connection has access to the selected Google Ads account.';
+                    }
+                }
+            }
+
             return $error['message'] ?? json_encode($error);
         }
 
