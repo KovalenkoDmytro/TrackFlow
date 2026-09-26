@@ -133,6 +133,28 @@ sudo tail -f /home/malma/trackflow/storage/logs/queue.log
 
 ### Deployments (With Zero Downtime)
 
+#### Quick Deploy (Recommended)
+
+Use the included `deploy.sh` script to automate the entire process:
+
+```bash
+cd /home/malma/trackflow
+./deploy.sh
+```
+
+The script will:
+1. Pull latest code from `dev-dmytro`
+2. Install PHP and npm dependencies
+3. Build Vite frontend assets
+4. Run database migrations
+5. Clear framework caches
+6. Reload Octane workers (`octane:reload`, falling back to a `supervisorctl restart` of `trackflow-octane` if unavailable) and restart queue workers
+7. **Purge Cloudflare cache** (if configured, optional — see below)
+
+#### Manual Deployment (If Preferred)
+
+Alternatively, run the steps manually:
+
 ```bash
 cd /home/malma/trackflow
 git pull origin dev-dmytro
@@ -140,8 +162,39 @@ composer install --no-dev --optimize-autoloader
 npm install && npm run build
 /usr/bin/php8.4 artisan migrate --force
 /usr/bin/php8.4 artisan optimize:clear
-sudo supervisorctl restart trackflow-octane:* trackflow-queue:*
+/usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart trackflow-octane:*
+sudo supervisorctl restart trackflow-queue:*
 ```
+
+**Restarting Octane workers is mandatory after every deploy that touches
+`resources/js/`.** Octane (FrankenPHP) keeps long-lived PHP worker processes
+that cache the Vite manifest (`Illuminate\Foundation\Vite::$manifests`) in
+memory for the lifetime of the worker — it is never refreshed automatically.
+If the workers are not restarted after `npm run build`, they keep serving
+HTML that references the previous (now-deleted) hashed asset filenames,
+causing 404s on JS/CSS and a white screen, even though the new build exists
+on disk. Prefer `octane:reload` (graceful, no dropped connections); fall back
+to `supervisorctl restart` only if `octane:reload` isn't available.
+
+#### Cloudflare Cache Purge (Optional)
+
+Cloudflare is not the cause of stale-asset 404s on staging — HTML responses
+are served with `Cache-Control: no-cache, private` and `cf-cache-status:
+DYNAMIC`, so Cloudflare never caches the HTML entry point. The real cause of
+stale-asset issues is long-lived Octane workers serving a cached Vite
+manifest (see above). Purging Cloudflare is a harmless extra step for other
+cached assets, not a fix for that problem.
+
+To enable the optional automatic purge in `deploy.sh`:
+1. Set `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN` in `/home/malma/trackflow/.env`
+2. Obtain these values from your Cloudflare dashboard (Zone ID is in Overview, API Token under My Profile → API Tokens)
+3. Re-run deployments using `./deploy.sh`
+
+`deploy.sh` picks these up automatically: it prefers shell/process environment
+variables (e.g. set in a CI runner), and otherwise reads them directly from the
+`.env` file described above — no extra export step is needed on the server.
+
+If neither the shell environment nor `.env` has these values set, the deploy script will skip the purge step with a warning.
 
 (`npm install && npm run build` is required whenever `resources/js/` changed — frontend is React/TS via Vite, built assets are served from `public/` by nginx.)
 
