@@ -70,13 +70,41 @@ echo ""
 # first; supervisorctl restart is only a fallback for environments where
 # octane:reload isn't available/configured (e.g. Octane not installed or
 # process manager not running under Supervisor).
+# Determine supervisor program names based on the script location (stage vs. production)
+case "$(basename "$SCRIPT_DIR")" in
+    trackflow)
+        DEPLOYMENT_ENV=production
+        OCTANE_PROGRAM=trackflow-octane
+        QUEUE_PROGRAM=trackflow-queue
+        ;;
+    stage-trackflow)
+        DEPLOYMENT_ENV=staging
+        OCTANE_PROGRAM=trackflow-stage-octane
+        QUEUE_PROGRAM=trackflow-stage-queue
+        ;;
+    *)
+        echo "❌ Unrecognized deployment directory: $(basename "$SCRIPT_DIR")" >&2
+        exit 1
+        ;;
+esac
+
+echo "🔍 Detected deployment environment: $DEPLOYMENT_ENV"
+echo ""
+
 echo "♻️ Restarting Octane workers..."
 
 if $PHP_BIN artisan octane:reload; then
     echo "✅ Octane workers reloaded gracefully."
 elif command -v supervisorctl >/dev/null 2>&1; then
     echo "⚠️  octane:reload unavailable, falling back to supervisorctl restart."
-    sudo supervisorctl restart trackflow-octane:*
+    # Verify the octane program exists before attempting restart
+    STATUS_OUTPUT=$(sudo supervisorctl status "${OCTANE_PROGRAM}:*" 2>&1) || true
+    if echo "$STATUS_OUTPUT" | grep -qi "no such process\|no such group"; then
+        echo "❌ Octane program '${OCTANE_PROGRAM}' not configured in supervisor."
+        echo "   Octane workers were NOT restarted — stale Vite manifest may still be served."
+    else
+        sudo supervisorctl restart "${OCTANE_PROGRAM}:*"
+    fi
 else
     echo "❌ Neither octane:reload nor supervisorctl are available."
     echo "   Octane workers were NOT restarted — stale Vite manifest may still be served."
@@ -85,7 +113,17 @@ echo ""
 
 echo "♻️ Restarting queue workers..."
 if command -v supervisorctl >/dev/null 2>&1; then
-    sudo supervisorctl restart trackflow-queue:*
+    # Check if the queue program exists by examining supervisorctl output.
+    # supervisorctl status returns nonzero exit code both when the program is not
+    # registered AND when it exists but is stopped/failed. We distinguish by
+    # examining stderr/stdout for "no such process" or "no such group" errors.
+    STATUS_OUTPUT=$(sudo supervisorctl status "${QUEUE_PROGRAM}:*" 2>&1) || true
+    if echo "$STATUS_OUTPUT" | grep -qi "no such process\|no such group"; then
+        echo "⚠️  Queue worker program '${QUEUE_PROGRAM}' not configured in supervisor."
+        echo "   Skipping queue restart (staging may not have dedicated queue workers)."
+    else
+        sudo supervisorctl restart "${QUEUE_PROGRAM}:*"
+    fi
 else
     echo "⚠️  supervisorctl not available — queue workers were NOT restarted."
 fi

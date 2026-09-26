@@ -10,9 +10,10 @@ This directory now contains all configuration and documentation needed to deploy
 |------|---------|-------------|
 | `composer.json` | Added `laravel/octane` dependency | Commit & push to git |
 | `config/octane.php` | Octane configuration | Already in project root |
-| `supervisor-trackflow-octane.conf` | Octane supervisor config | `/etc/supervisor/conf.d/` |
-| `supervisor-trackflow-queue.conf` | Queue worker supervisor config | `/etc/supervisor/conf.d/` |
-| `.env` (edit on server) | Environment variables | `/home/malma/trackflow/.env` |
+| `supervisor-trackflow-octane.conf` | Octane supervisor config (production) | `/etc/supervisor/conf.d/` |
+| `supervisor-trackflow-stage-octane.conf` | Octane supervisor config (staging on port 8071) | `/etc/supervisor/conf.d/` |
+| `supervisor-trackflow-queue.conf` | Queue worker supervisor config (production) | `/etc/supervisor/conf.d/` |
+| `.env` (edit on server) | Environment variables | `/home/malma/trackflow/.env` (production) or `/home/malma/stage-trackflow/.env` (staging) |
 | `nginx-octane-config.txt` | nginx reverse proxy config | Reference for `/etc/nginx/sites-available/` |
 
 ### 2. Documentation Files (For Reference)
@@ -57,6 +58,40 @@ composer install --no-dev --optimize-autoloader
 ### Step 3: Follow DEPLOYMENT_CHECKLIST.md
 
 All remaining steps are in `DEPLOYMENT_CHECKLIST.md`. Copy-paste each command section.
+
+## Staging Environment Setup (Optional)
+
+If you have a separate staging deployment at `/home/malma/stage-trackflow`, follow the same Quick Start steps above, **but in Step 3 also deploy the staging supervisor config:**
+
+### Pre-Deployment Setup (One-Time)
+
+Before installing the supervisor config, ensure the staging directory has correct permissions:
+
+```bash
+# On the staging server:
+# If /home/malma/stage-trackflow is owned by malma:malma, grant www-data write access:
+sudo chown -R malma:www-data /home/malma/stage-trackflow/{storage,bootstrap/cache}
+sudo find /home/malma/stage-trackflow/{storage,bootstrap/cache} -type d -exec chmod 2775 {} +
+sudo find /home/malma/stage-trackflow/{storage,bootstrap/cache} -type f -exec chmod 0664 {} +
+
+# Verify /var/log/supervisor exists and has correct permissions:
+ls -la /var/log/supervisor/
+# Expected: drwxr-xr-x root root (or similar root-owned directory)
+```
+
+### Deploy Supervisor Config
+
+```bash
+# On the staging server:
+sudo install -o root -g root -m 0644 supervisor-trackflow-stage-octane.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start 'trackflow-stage-octane:*'
+```
+
+The staging Octane process listens on **port 8071** (vs. 8000 in production) and runs under the `www-data` user (same as production, for consistency and security). The `deploy.sh` script automatically detects whether it is running in the production or staging directory and uses the correct supervisor program names (`trackflow-stage-octane` vs. `trackflow-octane`).
+
+**Note:** If staging does not require dedicated queue workers, you may omit the `supervisor-trackflow-queue.conf` setup — `deploy.sh` will skip queue restart if the program is not registered with supervisor.
 
 ## Architecture Overview
 
@@ -110,8 +145,8 @@ All remaining steps are in `DEPLOYMENT_CHECKLIST.md`. Copy-paste each command se
 - `config/octane.php` — New file with Octane settings
 
 **Server changes (manual via SSH):**
-- `/etc/supervisor/conf.d/trackflow-octane.conf` — New
-- `/etc/supervisor/conf.d/trackflow-queue.conf` — New
+- `/etc/supervisor/conf.d/supervisor-trackflow-octane.conf` — New
+- `/etc/supervisor/conf.d/supervisor-trackflow-queue.conf` — New
 - `/etc/nginx/sites-available/trackflow.dmytro-kovalenko.ca` — Modified (location block)
 - `/home/malma/trackflow/.env` — Add OCTANE_* variables
 
@@ -119,16 +154,29 @@ All remaining steps are in `DEPLOYMENT_CHECKLIST.md`. Copy-paste each command se
 
 ### Daily Operations
 
+**Production:**
 ```bash
 # Check status
-sudo supervisorctl status
+sudo supervisorctl status 'trackflow-octane:*' 'trackflow-queue:*'
 
-# Tail logs
-sudo tail -f /home/malma/trackflow/storage/logs/octane.log
-sudo tail -f /home/malma/trackflow/storage/logs/queue.log
+# Tail logs (from root-owned supervisor log directory)
+sudo tail -f /var/log/supervisor/trackflow-octane.log
+sudo tail -f /var/log/supervisor/trackflow-queue.log
 
 # Monitor queue depth
 /usr/bin/php8.4 /home/malma/trackflow/artisan queue:monitor
+```
+
+**Staging:**
+```bash
+# Check status
+sudo supervisorctl status 'trackflow-stage-octane:*'
+
+# Tail logs (from root-owned supervisor log directory)
+sudo tail -f /var/log/supervisor/trackflow-stage-octane.log
+
+# Verify staging is listening on port 8071
+sudo ss -tlnp | grep 8071
 ```
 
 ### Deployments (With Zero Downtime)
@@ -138,7 +186,12 @@ sudo tail -f /home/malma/trackflow/storage/logs/queue.log
 Use the included `deploy.sh` script to automate the entire process:
 
 ```bash
+# Production:
 cd /home/malma/trackflow
+./deploy.sh
+
+# Or staging:
+cd /home/malma/stage-trackflow
 ./deploy.sh
 ```
 
@@ -148,13 +201,15 @@ The script will:
 3. Build Vite frontend assets
 4. Run database migrations
 5. Clear framework caches
-6. Reload Octane workers (`octane:reload`, falling back to a `supervisorctl restart` of `trackflow-octane` if unavailable) and restart queue workers
-7. **Purge Cloudflare cache** (if configured, optional — see below)
+6. **Auto-detect the environment** (production vs. staging) and reload Octane workers (`octane:reload`, falling back to `supervisorctl restart` of the correct program: `trackflow-octane` for production, `trackflow-stage-octane` for staging)
+7. Restart queue workers (if the program exists in supervisor; skipped for staging if not configured)
+8. **Purge Cloudflare cache** (if configured, optional — see below)
 
 #### Manual Deployment (If Preferred)
 
 Alternatively, run the steps manually:
 
+**Production:**
 ```bash
 cd /home/malma/trackflow
 git pull origin dev-dmytro
@@ -162,8 +217,20 @@ composer install --no-dev --optimize-autoloader
 npm install && npm run build
 /usr/bin/php8.4 artisan migrate --force
 /usr/bin/php8.4 artisan optimize:clear
-/usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart trackflow-octane:*
-sudo supervisorctl restart trackflow-queue:*
+/usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart 'trackflow-octane:*'
+sudo supervisorctl restart 'trackflow-queue:*'
+```
+
+**Staging:**
+```bash
+cd /home/malma/stage-trackflow
+git pull origin dev-dmytro
+composer install --no-dev --optimize-autoloader
+npm install && npm run build
+/usr/bin/php8.4 artisan migrate --force
+/usr/bin/php8.4 artisan optimize:clear
+/usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart 'trackflow-stage-octane:*'
+# Skip queue restart if not configured for staging
 ```
 
 **Restarting Octane workers is mandatory after every deploy that touches
@@ -211,7 +278,7 @@ Then:
 ```bash
 sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl restart trackflow-queue:*
+sudo supervisorctl restart 'trackflow-queue:*'
 ```
 
 ## Important Notes
@@ -252,21 +319,24 @@ return [
 # Check supervisor logs
 sudo tail -100 /var/log/supervisor/supervisord.log
 
-# Try running manually to see the error
+# Try running manually (Production — note: www-data user):
 sudo -u www-data /usr/bin/php8.4 /home/malma/trackflow/artisan octane:start --server=frankenphp
+
+# Try running manually (Staging — note: www-data user):
+sudo -u www-data /usr/bin/php8.4 /home/malma/stage-trackflow/artisan octane:start --server=frankenphp --port=8071
 ```
 
 ### nginx returns 502 Bad Gateway
 
-1. Is Octane listening? `sudo netstat -tlnp | grep 8000`
+1. Is Octane listening? `sudo ss -tlnp | grep 8000`
 2. Check `/var/log/nginx/error.log`
-3. Restart both: `sudo supervisorctl restart trackflow-octane:*` && `sudo systemctl reload nginx`
+3. Restart both: `sudo supervisorctl restart 'trackflow-octane:*'` && `sudo systemctl reload nginx`
 
 ### Queue jobs not processing
 
 ```bash
 # Check supervisor status
-sudo supervisorctl status trackflow-queue:*
+sudo supervisorctl status 'trackflow-queue:*'
 
 # Check Laravel logs
 tail -50 /home/malma/trackflow/storage/logs/laravel.log
@@ -285,9 +355,9 @@ If you need to revert to PHP-FPM:
 
 ```bash
 # Stop Octane/queue
-sudo supervisorctl stop trackflow-octane:* trackflow-queue:*
-sudo rm /etc/supervisor/conf.d/trackflow-octane.conf
-sudo rm /etc/supervisor/conf.d/trackflow-queue.conf
+sudo supervisorctl stop 'trackflow-octane:*' 'trackflow-queue:*'
+sudo rm /etc/supervisor/conf.d/supervisor-trackflow-octane.conf
+sudo rm /etc/supervisor/conf.d/supervisor-trackflow-queue.conf
 sudo supervisorctl reread && sudo supervisorctl update
 
 # Revert nginx to PHP-FPM
