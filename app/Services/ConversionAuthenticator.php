@@ -23,12 +23,11 @@ final class ConversionAuthenticator
     /**
      * Resolve and authenticate the shop for an inbound conversion tracking request.
      *
-     * @param string $shopDomain     The myshopify domain sent in the request body.
-     * @param string $trackingSecret The raw secret sent in the request body.
-     *
+     * @param  string  $shopDomain  The myshopify domain sent in the request body.
+     * @param  string  $trackingSecret  The raw secret sent in the request body.
      * @return User The authenticated shop record.
      *
-     * @throws NotFoundHttpException     When no shop with the given domain exists.
+     * @throws NotFoundHttpException When no shop with the given domain exists.
      * @throws UnauthorizedHttpException When the tracking secret does not match.
      */
     public function authenticate(string $shopDomain, string $trackingSecret): User

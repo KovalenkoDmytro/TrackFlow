@@ -22,7 +22,7 @@ interface ConversionPlatformContract
      *
      * Called before saving credentials so the merchant gets immediate feedback.
      *
-     * @param array<string, mixed> $credentials Decrypted credentials from PlatformIntegration.
+     * @param  array<string, mixed>  $credentials  Decrypted credentials from PlatformIntegration.
      *
      * @throws \RuntimeException When the API rejects the credentials.
      */
@@ -45,7 +45,7 @@ interface ConversionPlatformContract
      * for partial failures — they are typically unrecoverable data issues).
      * Throws RuntimeException for network/auth errors so the job retries.
      *
-     * @param array<string, mixed> $credentials Decrypted credentials.
+     * @param  array<string, mixed>  $credentials  Decrypted credentials.
      *
      * @throws \RuntimeException On network or authentication errors.
      */

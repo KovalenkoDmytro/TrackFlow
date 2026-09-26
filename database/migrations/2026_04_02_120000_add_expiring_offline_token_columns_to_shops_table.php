@@ -9,8 +9,6 @@ class AddExpiringOfflineTokenColumnsToShopsTable extends Migration
 {
     /**
      * Run the migrations.
-     *
-     * @return void
      */
     public function up(): void
     {
@@ -23,8 +21,6 @@ class AddExpiringOfflineTokenColumnsToShopsTable extends Migration
 
     /**
      * Reverse the migrations.
-     *
-     * @return void
      */
     public function down(): void
     {
