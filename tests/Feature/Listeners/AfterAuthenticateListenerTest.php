@@ -16,7 +16,7 @@ describe('AfterAuthenticateListener', function (): void {
 
         $shop = User::factory()->create(['pixel_enabled' => false]);
 
-        (new AfterAuthenticateListener())->handle(new AppInstalledEvent(new ShopId($shop->getKey())));
+        (new AfterAuthenticateListener)->handle(new AppInstalledEvent(new ShopId($shop->getKey())));
 
         SyncWebPixel::assertNotPushed();
     });
@@ -26,7 +26,7 @@ describe('AfterAuthenticateListener', function (): void {
 
         $shop = User::factory()->create(['pixel_enabled' => false]);
 
-        (new AfterAuthenticateListener())->handle(new ShopAuthenticatedEvent(new ShopId($shop->getKey())));
+        (new AfterAuthenticateListener)->handle(new ShopAuthenticatedEvent(new ShopId($shop->getKey())));
 
         SyncWebPixel::assertNotPushed();
     });
@@ -35,7 +35,7 @@ describe('AfterAuthenticateListener', function (): void {
         $shop = User::factory()->create(['pixel_enabled' => true]);
         $initialPixelId = $shop->shopify_pixel_id;
 
-        (new AfterAuthenticateListener())->handle(new ShopAuthenticatedEvent(new ShopId($shop->getKey())));
+        (new AfterAuthenticateListener)->handle(new ShopAuthenticatedEvent(new ShopId($shop->getKey())));
 
         // The listener runs SyncWebPixel synchronously (not as a queued job) to avoid relying on queue:work.
         // We verify the action ran by checking that the shop's pixel state was synced.
@@ -48,7 +48,7 @@ describe('AfterAuthenticateListener', function (): void {
 
         $shop = User::factory()->create(['pixel_enabled' => false, 'tracking_secret' => null, 'installed_at' => null]);
 
-        (new AfterAuthenticateListener())->handle(new AppInstalledEvent(new ShopId($shop->getKey())));
+        (new AfterAuthenticateListener)->handle(new AppInstalledEvent(new ShopId($shop->getKey())));
 
         $fresh = User::query()->find($shop->getKey());
         expect($fresh->tracking_secret)->not->toBeNull();

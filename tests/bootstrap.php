@@ -31,4 +31,4 @@ foreach ($env_vars as $key => $value) {
     putenv("{$key}={$value}");
 }
 
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__.'/../vendor/autoload.php';

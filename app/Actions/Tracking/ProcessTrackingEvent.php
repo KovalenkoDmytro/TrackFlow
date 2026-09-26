@@ -98,9 +98,9 @@ final class ProcessTrackingEvent
 
         if (! $mapping instanceof ConversionActionMapping) {
             Log::warning('ProcessTrackingEvent: no mapping', [
-                'shop'     => $data->shopDomain,
+                'shop' => $data->shopDomain,
                 'platform' => $integration->platform->value,
-                'event'    => $data->event,
+                'event' => $data->event,
             ]);
 
             return;
@@ -108,28 +108,28 @@ final class ProcessTrackingEvent
 
         // Create delivery record before attempting the API call
         $delivery = PlatformDelivery::query()->create([
-            'tracking_event_id'      => $trackingEvent->getKey(),
+            'tracking_event_id' => $trackingEvent->getKey(),
             'platform_integration_id' => $integration->getKey(),
-            'platform'               => $integration->platform->value,
-            'status'                 => 'queued',
+            'platform' => $integration->platform->value,
+            'status' => 'queued',
         ]);
 
         $credentials = json_decode($integration->credentials, true);
 
         try {
             $platform = $this->resolver->resolve($integration->platform);
-            $success  = $platform->uploadConversion($credentials, $data, $mapping);
+            $success = $platform->uploadConversion($credentials, $data, $mapping);
 
             $delivery->update([
-                'status'   => $success ? 'delivered' : 'partial_failure',
+                'status' => $success ? 'delivered' : 'partial_failure',
                 'attempts' => $delivery->attempts + 1,
-                'sent_at'  => now(),
+                'sent_at' => now(),
             ]);
 
             $integration->last_success_at = $success ? now() : $integration->last_success_at;
 
             if (! $success) {
-                $integration->last_error    = 'partial_failure';
+                $integration->last_error = 'partial_failure';
                 $integration->last_error_at = now();
             }
 
@@ -137,24 +137,24 @@ final class ProcessTrackingEvent
 
             Log::info('ProcessTrackingEvent: dispatched', [
                 'platform' => $integration->platform->value,
-                'event'    => $data->event,
-                'success'  => $success,
+                'event' => $data->event,
+                'success' => $success,
             ]);
         } catch (\RuntimeException $e) {
             $delivery->update([
-                'status'        => 'failed',
-                'attempts'      => $delivery->attempts + 1,
+                'status' => 'failed',
+                'attempts' => $delivery->attempts + 1,
                 'response_body' => $e->getMessage(),
             ]);
 
-            $integration->last_error    = $e->getMessage();
+            $integration->last_error = $e->getMessage();
             $integration->last_error_at = now();
             $integration->save();
 
             Log::error('ProcessTrackingEvent: failed', [
                 'platform' => $integration->platform->value,
-                'event'    => $data->event,
-                'error'    => $e->getMessage(),
+                'event' => $data->event,
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;

@@ -42,11 +42,11 @@ final class PlatformIntegration extends Model
     protected function casts(): array
     {
         return [
-            'platform'       => Platform::class,
-            'active'         => 'boolean',
-            'settings'       => 'array',
+            'platform' => Platform::class,
+            'active' => 'boolean',
+            'settings' => 'array',
             'last_success_at' => 'datetime',
-            'last_error_at'  => 'datetime',
+            'last_error_at' => 'datetime',
         ];
     }
 
