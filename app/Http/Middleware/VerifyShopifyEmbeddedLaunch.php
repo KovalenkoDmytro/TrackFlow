@@ -46,7 +46,7 @@ final class VerifyShopifyEmbeddedLaunch
     private const int TIMESTAMP_LEEWAY_SECONDS = 300;
 
     /** @var list<string> */
-    private const array BOUNCE_QUERY_STRIP = ['hmac', 'timestamp', 'shop', 'session', 'locale', 'id_token', 'signature'];
+    private const array BOUNCE_QUERY_STRIP = ['hmac', 'timestamp', 'session', 'locale', 'id_token', 'signature'];
 
     public function handle(Request $request, Closure $next): Response
     {

@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -76,6 +77,23 @@ abstract class TestCase extends BaseTestCase
         );
 
         return [...$params, 'hmac' => $hmac];
+    }
+
+    /**
+     * Extracts and url-decodes the `shopify-reload` query param from a
+     * `VerifyShopifyEmbeddedLaunch::bounce()` redirect response — this is the
+     * URL App Bridge reloads the SPA to after fetching a fresh `id_token`, so
+     * whether it retains `shop` (and strips the stale auth params) is the
+     * behavior that actually matters, as opposed to the outer redirect's own
+     * `shop`/`host` route params, which are populated independently of it.
+     */
+    public function bounceReloadTarget(TestResponse $response): string
+    {
+        $location = (string) $response->headers->get('Location');
+
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $bounceParams);
+
+        return urldecode($bounceParams['shopify-reload'] ?? '');
     }
 
     private function base64UrlEncode(string $data): string

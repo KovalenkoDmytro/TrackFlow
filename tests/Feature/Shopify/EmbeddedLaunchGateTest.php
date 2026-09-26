@@ -27,9 +27,17 @@ describe('VerifyShopifyEmbeddedLaunch: gates the embedded shell routes', functio
         $response->assertRedirect();
         expect($response->headers->get('Location'))->toContain('/shopify/session-token-bounce');
         $this->assertGuest();
+        expect($this->bounceReloadTarget($response))
+            ->toContain("shop={$shop->name}")
+            ->not->toContain('hmac=')
+            ->not->toContain('timestamp=')
+            ->not->toContain('session=')
+            ->not->toContain('locale=')
+            ->not->toContain('id_token=')
+            ->not->toContain('signature=');
     });
 
-    it('bounces a request whose timestamp is outside the 5-minute window', function (): void {
+    it('bounces a request whose timestamp is outside the 5-minute window, preserving `shop` in the reload target so App Bridge reloads with shop context', function (): void {
         $shop = User::factory()->create();
 
         $query = $this->signShopifyLaunchQuery([
@@ -41,6 +49,32 @@ describe('VerifyShopifyEmbeddedLaunch: gates the embedded shell routes', functio
 
         $response->assertRedirect();
         expect($response->headers->get('Location'))->toContain('/shopify/session-token-bounce');
+        expect($this->bounceReloadTarget($response))
+            ->toContain("shop={$shop->name}")
+            ->not->toContain('hmac=')
+            ->not->toContain('timestamp=')
+            ->not->toContain('session=')
+            ->not->toContain('locale=')
+            ->not->toContain('id_token=')
+            ->not->toContain('signature=');
+    });
+
+    it('bounces (preserving `shop`) when a present id_token fails verification for a reason other than ShopNotInstalled', function (): void {
+        $shop = User::factory()->create();
+
+        // 'sid' => null forces SessionTokenFailure::Invalid (not ShopNotInstalled),
+        // which must fall through to the generic bounce rather than the
+        // authenticate redirect.
+        $badToken = $this->shopifySessionToken($shop, ['sid' => null]);
+
+        $response = $this->get('/?id_token='.$badToken.'&shop='.$shop->name);
+
+        $response->assertRedirect();
+        expect($response->headers->get('Location'))->toContain('/shopify/session-token-bounce');
+        $this->assertGuest();
+        expect($this->bounceReloadTarget($response))
+            ->toContain("shop={$shop->name}")
+            ->not->toContain('id_token=');
     });
 
     it('bounces a request where the HMAC was signed for a different shop than the `shop` param claims', function (): void {
