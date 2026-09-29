@@ -165,6 +165,7 @@ export interface Ga4FormData {
 export interface MetaCredentials {
   pixel_id: string;
   test_event_code: string;
+  has_test_event_code: boolean;
   access_token: string;
   has_access_token: boolean;
 }

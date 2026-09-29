@@ -38,8 +38,24 @@ describe('GET /api/settings/meta — credential write-only response', function (
                 'test_event_code' => 'TEST12345',
                 'access_token' => '',
                 'has_access_token' => true,
+                'has_test_event_code' => true,
             ],
         ]);
+    });
+
+    it('reports has_test_event_code false when no test event code is stored', function (): void {
+        $shop = User::factory()->create();
+        PlatformIntegration::query()->create([
+            'user_id' => $shop->getKey(),
+            'platform' => Platform::Meta,
+            'active' => true,
+            'credentials' => json_encode(['pixel_id' => '1234567890', 'access_token' => 'tok', 'test_event_code' => '  ']),
+            'settings' => [],
+        ]);
+
+        $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/meta')
+            ->assertOk()
+            ->assertJsonPath('credentials.has_test_event_code', false);
     });
 });
 

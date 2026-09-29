@@ -55,6 +55,9 @@ final class MetaApiController extends Controller
         $credentials = [
             'pixel_id' => $raw['pixel_id'] ?? '',
             'test_event_code' => $raw['test_event_code'] ?? '',
+            // While a test event code is stored Meta shows every event only under Test Events;
+            // the boolean lets the UI warn without depending on the code's value.
+            'has_test_event_code' => trim((string) ($raw['test_event_code'] ?? '')) !== '',
             // Access token is write-only: never echo the stored value back to the browser.
             'access_token' => '',
             'has_access_token' => ! empty($raw['access_token'] ?? null),
