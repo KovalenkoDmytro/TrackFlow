@@ -158,12 +158,82 @@ final class HealthCheck extends Command
 
         foreach ($stats as $row) {
             $total = (int) $row->getAttribute('total');
-            if ($total >= $minCount && (int) $row->getAttribute('delivered') === 0) {
-                $problems['dead_integration:'.$row->platform_integration_id] = "{$row->platform} integration {$row->platform_integration_id} has {$total} deliveries in the last 24h and none delivered.";
+            if ($total < $minCount || (int) $row->getAttribute('delivered') !== 0) {
+                continue;
             }
+
+            $reasons = $this->deliveryReasons((int) $row->platform_integration_id);
+            if ($this->onlyDataConditions($reasons, $total)) {
+                continue;
+            }
+
+            $shop = PlatformIntegration::query()->with('user:id,name')->find($row->platform_integration_id)?->user?->name;
+            $where = $shop === null ? '' : " ({$shop})";
+            $message = "{$row->platform} integration {$row->platform_integration_id}{$where}: {$total} deliveries in 24h, none delivered.";
+
+            if ($reasons !== []) {
+                $code = (string) array_key_first($reasons);
+                $message .= " Top reason: {$code} ({$reasons[$code]})";
+                $hint = config("alerts.delivery_reason_hints.{$code}.hint");
+                $message .= is_string($hint) ? " — {$hint}" : '.';
+                if (count($reasons) > 1) {
+                    $message .= ' Other reasons: '.collect($reasons)->except($code)->map(fn (int $n, string $c): string => "{$c} ({$n})")->implode(', ').'.';
+                }
+            }
+
+            $problems['dead_integration:'.$row->platform_integration_id] = $message;
         }
 
         return $problems;
+    }
+
+    /**
+     * Primary rejection code per non-delivered row in the last 24h, most frequent first.
+     * Older rows without a persisted reason are simply not counted.
+     *
+     * @return array<string, int> code => rows
+     */
+    private function deliveryReasons(int $integrationId): array
+    {
+        $codes = PlatformDelivery::query()
+            ->where('platform_integration_id', $integrationId)
+            ->where('created_at', '>=', now()->subDay())
+            ->where('status', '!=', 'delivered')
+            ->whereNotNull('response_body')
+            ->limit(2000)
+            ->pluck('response_body')
+            ->map(function (string $body): ?string {
+                $decoded = json_decode($body, true);
+                $code = is_array($decoded) && is_array($decoded['codes'] ?? null) ? ($decoded['codes'][0] ?? null) : null;
+
+                return is_string($code) ? $code : null;
+            })
+            ->filter()
+            ->countBy()
+            ->sortDesc();
+
+        return $codes->all();
+    }
+
+    /**
+     * True when every row carries a code and all codes are normal data conditions
+     * (expired/too-recent/duplicate events) that reconnecting cannot fix.
+     *
+     * @param  array<string, int>  $reasons
+     */
+    private function onlyDataConditions(array $reasons, int $total): bool
+    {
+        if ($reasons === [] || array_sum($reasons) < $total) {
+            return false;
+        }
+
+        foreach (array_keys($reasons) as $code) {
+            if (config("alerts.delivery_reason_hints.{$code}.alert", true) !== false) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @return array<string, string> */
