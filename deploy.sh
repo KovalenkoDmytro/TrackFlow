@@ -76,11 +76,13 @@ case "$(basename "$SCRIPT_DIR")" in
         DEPLOYMENT_ENV=production
         OCTANE_PROGRAM=trackflow-octane
         QUEUE_PROGRAM=trackflow-queue
+        SCHEDULER_PROGRAM=trackflow-scheduler
         ;;
     stage-trackflow)
         DEPLOYMENT_ENV=staging
         OCTANE_PROGRAM=trackflow-stage-octane
         QUEUE_PROGRAM=trackflow-stage-queue
+        SCHEDULER_PROGRAM=trackflow-stage-scheduler
         ;;
     *)
         echo "❌ Unrecognized deployment directory: $(basename "$SCRIPT_DIR")" >&2
@@ -126,6 +128,24 @@ if command -v supervisorctl >/dev/null 2>&1; then
     fi
 else
     echo "⚠️  supervisorctl not available — queue workers were NOT restarted."
+fi
+echo ""
+
+echo "♻️ Restarting scheduler..."
+if command -v supervisorctl >/dev/null 2>&1; then
+    # Check if the scheduler program exists by examining supervisorctl output.
+    # supervisorctl status returns nonzero exit code both when the program is not
+    # registered AND when it exists but is stopped/failed. We distinguish by
+    # examining stderr/stdout for "no such process" or "no such group" errors.
+    STATUS_OUTPUT=$(sudo supervisorctl status "${SCHEDULER_PROGRAM}:*" 2>&1) || true
+    if echo "$STATUS_OUTPUT" | grep -qi "no such process\|no such group"; then
+        echo "⚠️  Scheduler program '${SCHEDULER_PROGRAM}' not configured in supervisor."
+        echo "   Skipping scheduler restart (scheduler may not be installed yet)."
+    else
+        sudo supervisorctl restart "${SCHEDULER_PROGRAM}:*"
+    fi
+else
+    echo "⚠️  supervisorctl not available — scheduler was NOT restarted."
 fi
 echo ""
 
