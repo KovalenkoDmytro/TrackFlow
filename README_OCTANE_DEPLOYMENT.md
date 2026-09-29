@@ -253,9 +253,10 @@ cd /home/malma/stage-trackflow
 ```
 
 The script will:
+0. **Pre-flight (before anything is pulled):** abort with a non-zero exit if `.env` has `APP_ENV` other than `local` together with `SHOPIFY_DEV_AUTH_BYPASS=true`, or `APP_DEBUG=true`, or a non-empty `SHOPIFY_DEV_SHOP_DOMAIN`. Only variable names are printed, never values. The bypass variables are for local development only; never copy them to a server.
 1. Pull latest code from `dev-dmytro`
-2. Install PHP and npm dependencies
-3. Build Vite frontend assets
+2. Install PHP dependencies (`composer install --no-dev --optimize-autoloader`), then run a **boot smoke test** (`artisan about`). If the app cannot boot the deploy aborts before migrations and worker restarts, so a broken release never replaces the running workers.
+3. Install npm dependencies and build Vite frontend assets
 4. Run database migrations
 5. Clear framework caches
 6. **Auto-detect the environment** (production vs. staging) and reload Octane workers (`octane:reload`, falling back to `supervisorctl restart` of the correct program: `trackflow-octane` for production, `trackflow-stage-octane` for staging)
@@ -263,6 +264,8 @@ The script will:
 8. **Purge Cloudflare cache** (if configured, optional — see below)
 
 #### Manual Deployment (If Preferred)
+
+If you `git pull` by hand you MUST also run `composer install --no-dev --optimize-autoloader`; otherwise new packages are missing from `vendor/` and the app fails to boot. Prefer `./deploy.sh`, which does this for you.
 
 Alternatively, run the steps manually:
 

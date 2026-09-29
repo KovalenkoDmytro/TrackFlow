@@ -160,7 +160,9 @@ class AppServiceProvider extends ServiceProvider
      */
     private function guardAgainstUnsupportedShopifyDevBypass(): void
     {
-        if (config('shopify-app.dev_auth_bypass') === true && ! app()->environment('local')) {
+        // Reads the raw flag: `dev_auth_bypass` is already forced off outside local,
+        // which would make this guard blind to a misconfigured .env.
+        if (config('shopify-app.dev_auth_bypass_requested') === true && ! app()->environment('local')) {
             throw new RuntimeException(
                 'SHOPIFY_DEV_AUTH_BYPASS is enabled outside the local environment. '
                 .'This bypasses Shopify session-token verification on /api/* and '

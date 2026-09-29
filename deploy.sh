@@ -12,6 +12,10 @@ set -e
 # Usage:
 #   ./deploy.sh
 #
+# Aborts before pulling if the .env is unsafe for a non-local APP_ENV
+# (SHOPIFY_DEV_AUTH_BYPASS=true, APP_DEBUG=true, SHOPIFY_DEV_SHOP_DOMAIN set),
+# and aborts before migrations/restarts if the app cannot boot.
+#
 # Prerequisites:
 #   - Run this script on the staging server via SSH
 #   - Environment variables must be set (see README_OCTANE_DEPLOYMENT.md):
@@ -34,6 +38,70 @@ cd "$SCRIPT_DIR"
 
 PHP_BIN="/usr/bin/php8.4"
 
+# Reads a single key from the Laravel .env file next to this script, without
+# sourcing/executing it (the .env may contain values with spaces, quotes, or
+# other shell-unsafe characters). The last occurrence wins, as in Laravel's
+# dotenv loader. ENV_FILE overrides the path (used for testing). Only the exact key requested is extracted;
+# the rest of the file is never parsed or evaluated. A single layer of
+# surrounding quotes, as commonly used in .env files, is stripped.
+read_env_value() {
+    local key="$1"
+    local env_file="${ENV_FILE:-${SCRIPT_DIR}/.env}"
+    local value=""
+
+    if [[ -f "$env_file" ]]; then
+        value=$(grep -E "^${key}=" "$env_file" | tail -n1 | cut -d '=' -f2- || true)
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+    fi
+
+    printf '%s' "$value"
+}
+
+is_truthy() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        true|1|yes|on|"(true)") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Pre-flight: refuse to deploy over a misconfigured .env. Prints variable NAMES
+# only, never values. Runs before anything is pulled, installed or restarted.
+preflight_env_check() {
+    local env_file="${ENV_FILE:-${SCRIPT_DIR}/.env}"
+    local bad=()
+
+    if [[ ! -f "$env_file" ]]; then
+        echo "❌ Pre-flight failed: .env not found." >&2
+        return 1
+    fi
+
+    if [[ "$(read_env_value APP_ENV)" != "local" ]]; then
+        is_truthy "$(read_env_value SHOPIFY_DEV_AUTH_BYPASS)" && bad+=("SHOPIFY_DEV_AUTH_BYPASS=true")
+        is_truthy "$(read_env_value APP_DEBUG)" && bad+=("APP_DEBUG=true")
+        [[ -n "$(read_env_value SHOPIFY_DEV_SHOP_DOMAIN)" ]] && bad+=("SHOPIFY_DEV_SHOP_DOMAIN (must be empty)")
+    fi
+
+    if (( ${#bad[@]} > 0 )); then
+        echo "❌ Pre-flight failed: unsafe .env settings for a non-local APP_ENV:" >&2
+        printf '   - %s\n' "${bad[@]}" >&2
+        echo "   Fix the server .env and re-run. Nothing was pulled or restarted." >&2
+        return 1
+    fi
+
+    echo "✅ Pre-flight .env checks passed."
+}
+
+# DEPLOY_PREFLIGHT_ONLY=1 runs just this check (used for testing).
+echo "🛫 Pre-flight checks..."
+preflight_env_check || exit 1
+if [[ "${DEPLOY_PREFLIGHT_ONLY:-}" == "1" ]]; then
+    exit 0
+fi
+echo ""
+
 # Step 1: Pull latest code
 echo "📥 Pulling latest code from dev-dmytro..."
 git pull origin dev-dmytro
@@ -42,6 +110,17 @@ echo ""
 # Step 2: Install backend dependencies
 echo "📦 Installing PHP dependencies..."
 composer install --no-dev --optimize-autoloader
+echo ""
+
+# Boot smoke test: a fresh vendor/ + new code must boot the app (this also trips
+# the fatal boot guards in AppServiceProvider). Fails the deploy BEFORE migrations
+# and worker restarts, so a broken release never replaces the running workers.
+echo "🩺 Boot smoke test..."
+if ! $PHP_BIN artisan about --only=environment >/dev/null; then
+    echo "❌ Application failed to boot after pull + composer install." >&2
+    echo "   Aborting before migrations and restarts; running workers are untouched." >&2
+    exit 1
+fi
 echo ""
 
 # Step 3: Install and build frontend assets
@@ -151,27 +230,6 @@ echo ""
 
 # Step 7: Purge Cloudflare cache
 echo "☁️ Purging Cloudflare cache..."
-
-# Reads a single key from the Laravel .env file next to this script, without
-# sourcing/executing it (the .env may contain values with spaces, quotes, or
-# other shell-unsafe characters). Only the exact key requested is extracted;
-# the rest of the file is never parsed or evaluated. A single layer of
-# surrounding quotes, as commonly used in .env files, is stripped.
-read_env_value() {
-    local key="$1"
-    local env_file="${SCRIPT_DIR}/.env"
-    local value=""
-
-    if [[ -f "$env_file" ]]; then
-        value=$(grep -m1 -E "^${key}=" "$env_file" | cut -d '=' -f2- || true)
-        value="${value%\"}"
-        value="${value#\"}"
-        value="${value%\'}"
-        value="${value#\'}"
-    fi
-
-    printf '%s' "$value"
-}
 
 # Shell/process env vars take priority (e.g. CI runners); otherwise fall back
 # to the app's .env file, per the setup instructions in
