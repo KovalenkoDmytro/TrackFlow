@@ -13,6 +13,8 @@ This directory now contains all configuration and documentation needed to deploy
 | `supervisor-trackflow-octane.conf` | Octane supervisor config (production) | `/etc/supervisor/conf.d/` |
 | `supervisor-trackflow-stage-octane.conf` | Octane supervisor config (staging on port 8071) | `/etc/supervisor/conf.d/` |
 | `supervisor-trackflow-queue.conf` | Queue worker supervisor config (production) | `/etc/supervisor/conf.d/` |
+| `supervisor-trackflow-scheduler.conf` | Laravel scheduler supervisor config (production) | `/etc/supervisor/conf.d/` |
+| `supervisor-trackflow-stage-scheduler.conf` | Laravel scheduler supervisor config (staging) | `/etc/supervisor/conf.d/` |
 | `.env` (edit on server) | Environment variables | `/home/malma/trackflow/.env` (production) or `/home/malma/stage-trackflow/.env` (staging) |
 | `nginx-octane-config.txt` | nginx reverse proxy config | Reference for `/etc/nginx/sites-available/` |
 
@@ -84,14 +86,59 @@ ls -la /var/log/supervisor/
 ```bash
 # On the staging server:
 sudo install -o root -g root -m 0644 supervisor-trackflow-stage-octane.conf /etc/supervisor/conf.d/
+sudo install -o root -g root -m 0644 supervisor-trackflow-stage-scheduler.conf /etc/supervisor/conf.d/
 sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl start 'trackflow-stage-octane:*'
+sudo supervisorctl start 'trackflow-stage-scheduler:*'
 ```
 
-The staging Octane process listens on **port 8071** (vs. 8000 in production) and runs under the `www-data` user (same as production, for consistency and security). The `deploy.sh` script automatically detects whether it is running in the production or staging directory and uses the correct supervisor program names (`trackflow-stage-octane` vs. `trackflow-octane`).
+The staging Octane process listens on **port 8071** (vs. 8000 in production) and runs under the `www-data` user (same as production, for consistency and security). The `deploy.sh` script automatically detects whether it is running in the production or staging directory and uses the correct supervisor program names (`trackflow-stage-octane` vs. `trackflow-octane`, and `trackflow-stage-scheduler` vs. `trackflow-scheduler`).
 
-**Note:** If staging does not require dedicated queue workers, you may omit the `supervisor-trackflow-queue.conf` setup — `deploy.sh` will skip queue restart if the program is not registered with supervisor.
+**Note:** If staging does not require dedicated queue workers, you may omit the `supervisor-trackflow-queue.conf` setup — `deploy.sh` will skip queue restart if the program is not registered with supervisor. The scheduler is independent and recommended for both production and staging.
+
+## Scheduler Setup
+
+The Laravel scheduler runs periodic tasks defined in `routes/console.php`. Tasks include:
+- `google-ads:sync-clicks --days=3` — hourly syncing of recent click data
+- `google-ads:sync-clicks --days=90` — daily syncing of 90-day historical data
+- `tracking:prune` — daily cleanup of raw tracking events (keeps 90-day retention)
+- `shopify:detect-orphaned-shops` — daily detection of disconnected Shopify shops
+
+### Deploy Production Scheduler
+
+```bash
+# On the production server:
+sudo install -o root -g root -m 0644 supervisor-trackflow-scheduler.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start 'trackflow-scheduler:*'
+```
+
+### First Run (Backfill Historical Data)
+
+When the scheduler first starts, manually run the 90-day sync to backfill data:
+
+```bash
+/usr/bin/php8.4 /home/malma/trackflow/artisan google-ads:sync-clicks --days=90
+```
+
+This ensures the database is populated before hourly/daily tasks begin.
+
+### Important: Remove Old Cron Jobs
+
+If a `schedule:run` cron job already exists on the server (e.g., in `/etc/cron.d/` or the `malma` user's crontab), **remove it immediately**. Two concurrent schedulers will cause duplicate task execution:
+
+```bash
+# Check for existing cron jobs
+sudo crontab -u malma -l
+
+# If `schedule:run` exists, remove it via:
+sudo crontab -u malma -e
+# Delete the line containing: * * * * * cd /home/malma/trackflow && php artisan schedule:run >> /dev/null 2>&1
+```
+
+The supervisor-managed `schedule:work` process already monitors and executes all scheduled tasks.
 
 ## Architecture Overview
 
@@ -115,14 +162,16 @@ The staging Octane process listens on **port 8071** (vs. 8000 in production) and
     │PostgreSQL       │Redis 7.2+     │
     │(Database)       │(Cache/Session)│
     └─────────┘       └──────────────┘
-                   │
-┌──────────────────┴─────────────────────┐
-│ Supervisor Queue Workers (4 processes) │
-│  • artisan queue:work --timeout=120   │
-│  • Max 500 jobs per process/hour      │
-│  • Automatic restart on failure       │
-│  • User: malma                        │
-└──────────────────────────────────────┘
+        │
+        ├─────────────────────────────┐
+        ▼                             ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│Supervisor Queue      │  │ Supervisor Scheduler │
+│Workers (4 processes) │  │ (1 process)          │
+│artisan queue:work    │  │ artisan schedule:work│
+│Max 500 jobs/hr       │  │ Runs scheduled tasks │
+│User: www-data        │  │ User: www-data       │
+└──────────────────────┘  └──────────────────────┘
 ```
 
 ## Key Changes
@@ -156,12 +205,16 @@ The staging Octane process listens on **port 8071** (vs. 8000 in production) and
 
 **Production:**
 ```bash
-# Check status
-sudo supervisorctl status 'trackflow-octane:*' 'trackflow-queue:*'
+# Check status of all processes
+sudo supervisorctl status 'trackflow-octane:*' 'trackflow-queue:*' 'trackflow-scheduler:*'
 
 # Tail logs (from root-owned supervisor log directory)
 sudo tail -f /var/log/supervisor/trackflow-octane.log
 sudo tail -f /var/log/supervisor/trackflow-queue.log
+sudo tail -f /var/log/supervisor/trackflow-scheduler.log
+
+# Verify scheduled tasks
+/usr/bin/php8.4 /home/malma/trackflow/artisan schedule:list
 
 # Monitor queue depth
 /usr/bin/php8.4 /home/malma/trackflow/artisan queue:monitor
@@ -169,14 +222,18 @@ sudo tail -f /var/log/supervisor/trackflow-queue.log
 
 **Staging:**
 ```bash
-# Check status
-sudo supervisorctl status 'trackflow-stage-octane:*'
+# Check status of all processes
+sudo supervisorctl status 'trackflow-stage-octane:*' 'trackflow-stage-scheduler:*'
 
 # Tail logs (from root-owned supervisor log directory)
 sudo tail -f /var/log/supervisor/trackflow-stage-octane.log
+sudo tail -f /var/log/supervisor/trackflow-stage-scheduler.log
 
 # Verify staging is listening on port 8071
 sudo ss -tlnp | grep 8071
+
+# Verify scheduled tasks
+/usr/bin/php8.4 /home/malma/stage-trackflow/artisan schedule:list
 ```
 
 ### Deployments (With Zero Downtime)
@@ -219,6 +276,7 @@ npm install && npm run build
 /usr/bin/php8.4 artisan optimize:clear
 /usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart 'trackflow-octane:*'
 sudo supervisorctl restart 'trackflow-queue:*'
+sudo supervisorctl restart 'trackflow-scheduler:*'
 ```
 
 **Staging:**
@@ -230,6 +288,7 @@ npm install && npm run build
 /usr/bin/php8.4 artisan migrate --force
 /usr/bin/php8.4 artisan optimize:clear
 /usr/bin/php8.4 artisan octane:reload || sudo supervisorctl restart 'trackflow-stage-octane:*'
+sudo supervisorctl restart 'trackflow-stage-scheduler:*'
 # Skip queue restart if not configured for staging
 ```
 
@@ -354,11 +413,15 @@ Lower `workers` or `max_requests` in supervisor config, then restart.
 If you need to revert to PHP-FPM:
 
 ```bash
-# Stop Octane/queue
-sudo supervisorctl stop 'trackflow-octane:*' 'trackflow-queue:*'
+# Stop all supervisor processes
+sudo supervisorctl stop 'trackflow-octane:*' 'trackflow-queue:*' 'trackflow-scheduler:*'
 sudo rm /etc/supervisor/conf.d/supervisor-trackflow-octane.conf
 sudo rm /etc/supervisor/conf.d/supervisor-trackflow-queue.conf
+sudo rm /etc/supervisor/conf.d/supervisor-trackflow-scheduler.conf
 sudo supervisorctl reread && sudo supervisorctl update
+
+# Re-enable old cron-based scheduler if you had one
+# (or use: * * * * * cd /home/malma/trackflow && php artisan schedule:run >> /dev/null 2>&1)
 
 # Revert nginx to PHP-FPM
 sudo nano /etc/nginx/sites-available/trackflow.dmytro-kovalenko.ca
