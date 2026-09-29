@@ -295,6 +295,19 @@ sudo supervisorctl restart 'trackflow-stage-scheduler:*'
 # Skip queue restart if not configured for staging
 ```
 
+#### Web Pixel extension changes (`extensions/web-pixel`)
+
+`deploy.sh` does **not** ship the storefront pixel. Any change under `extensions/web-pixel/` only reaches shops after the extension is released to Shopify from a machine with the Shopify CLI:
+
+```bash
+shopify app deploy                   # production app (shopify.app.toml)
+shopify app deploy --config staging  # staging app (shopify.app.staging.toml)
+```
+
+Server-side changes (Actions, `MetaClient`, migrations, the React UI) need the normal `./deploy.sh` and are independent of the extension. Deploy the server first: the pixel's new `event_source_url` field is optional and older pixels keep working, and new server logic works with events from old pixels. Shopify rolls a new extension version out to storefronts gradually, so expect a lag (and a mix of old and new pixel versions) before all events carry the new fields.
+
+The pixel sends `event_source_url` as origin + pathname only (query string and fragment are never sent, token-bearing paths such as `/checkouts/<token>` are truncated to `/checkouts`); the server re-applies the same reduction and accepts https only.
+
 **Restarting Octane workers is mandatory after every deploy that touches
 `resources/js/`.** Octane (FrankenPHP) keeps long-lived PHP worker processes
 that cache the Vite manifest (`Illuminate\Foundation\Vite::$manifests`) in
