@@ -104,7 +104,13 @@ export function AnalyticsPage() {
         {platform === 'google_ads' ? (
           <GoogleAdsAttributionTable summary={eventCountsData?.summary} loading={isFetching} />
         ) : isMeta ? (
-          <PlatformDeliveryTable stats={deliveryStats} totals={deliveryTotals} loading={isFetching} />
+          <PlatformDeliveryTable
+            stats={deliveryStats}
+            totals={deliveryTotals}
+            loading={isFetching}
+            platformLabel={PLATFORM_LABELS[platform ?? ''] ?? 'Meta'}
+            integration={deliveryData?.summary?.integration}
+          />
         ) : (
           <EventCountsTable counts={counts} total={total} loading={isFetching} />
         )}

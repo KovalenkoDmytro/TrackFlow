@@ -75,10 +75,16 @@ export interface PlatformDeliveryTotals {
   pending: number;
 }
 
+export interface PlatformIntegrationState {
+  active: boolean;
+  active_mappings: number;
+}
+
 export interface PlatformDeliverySummary {
   period: AnalyticsPeriod | null;
   delivery_stats: PlatformDeliveryStat[];
   totals: PlatformDeliveryTotals;
+  integration?: PlatformIntegrationState;
 }
 
 export interface PlatformDeliveryResponse {

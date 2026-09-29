@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Analytics\GetEventCountsForPeriod;
 use App\Actions\Analytics\GetGoogleAdsAttribution;
 use App\Actions\Analytics\GetPlatformDeliveryStatsForPeriod;
+use App\Enums\Platform;
 use App\Enums\TrackingEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Analytics\AnalyticsFilterRequest;
@@ -96,12 +97,21 @@ final class AnalyticsController extends Controller
                 'pending' => (int) array_sum(array_map(fn (array $s): int => $s['pending'], $deliveryStats)),
             ];
 
+            $integration = $shop->platformIntegrations()
+                ->where('platform', Platform::Meta)
+                ->withCount(['conversionActionMappings as active_mappings_count' => fn ($query) => $query->where('active', true)])
+                ->first();
+
             return response()->json([
                 'filters' => $filters,
                 'summary' => [
                     'period' => $period,
                     'delivery_stats' => $deliveryStats,
                     'totals' => $totals,
+                    'integration' => [
+                        'active' => $integration?->active === true,
+                        'active_mappings' => (int) ($integration->active_mappings_count ?? 0),
+                    ],
                 ],
                 'meta' => $meta,
             ]);
