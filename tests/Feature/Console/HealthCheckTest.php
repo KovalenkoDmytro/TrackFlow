@@ -92,13 +92,63 @@ it('flags delivery failures over the threshold only', function (): void {
     ]));
 
     $make('failed', 4);
-    $this->artisan('health:check --no-mail')->assertSuccessful(); // below count
+    $this->artisan('health:check --no-mail')->assertSuccessful(); // still retrying (attempts < tries)
 
-    $make('partial_failure', 1);
+    PlatformDelivery::query()->update(['attempts' => 3]);
+    $this->artisan('health:check --no-mail')->assertSuccessful(); // 4 exhausted, below count
+
+    $make('failed', 1);
+    PlatformDelivery::query()->update(['attempts' => 3]);
     $this->artisan('health:check --no-mail')->assertFailed(); // 5 of 5
 
     $make('delivered', 10);
     $this->artisan('health:check --no-mail')->assertSuccessful(); // 5 of 15 < 50%
+});
+
+it('treats old failed rows as exhausted even with few recorded attempts', function (): void {
+    $integration = healthIntegration();
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    collect(range(1, 5))->each(fn () => PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => 'meta', 'status' => 'failed', 'attempts' => 1,
+    ]));
+    PlatformDelivery::query()->update(['updated_at' => now()->subMinutes(30)]);
+
+    $this->artisan('health:check --no-mail')->assertFailed();
+});
+
+it('ignores partial_failure deliveries', function (): void {
+    $integration = healthIntegration();
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    collect(range(1, 20))->each(fn () => PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => 'meta', 'status' => 'partial_failure', 'attempts' => 1,
+    ]));
+    config()->set('alerts.dead_integration_min_deliveries', 100);
+
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+});
+
+it('flags an active integration with many deliveries and none delivered', function (): void {
+    $integration = healthIntegration();
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    $make = fn (string $status, int $n) => collect(range(1, $n))->each(fn () => PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => 'meta', 'status' => $status, 'attempts' => 1,
+    ]));
+
+    $make('partial_failure', 9);
+    $this->artisan('health:check --no-mail')->assertSuccessful(); // below min deliveries
+
+    $make('partial_failure', 1);
+    $this->artisan('health:check --no-mail')->assertFailed(); // 10, none delivered
+
+    $make('delivered', 1);
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    PlatformDelivery::query()->where('status', 'delivered')->delete();
+    $integration->update(['active' => false]);
+    $this->artisan('health:check --no-mail')->assertSuccessful(); // inactive is not dead
 });
 
 it('flags active integrations without active mappings', function (): void {
@@ -140,11 +190,37 @@ it('sends a single recovered email when problems clear', function (): void {
         'platform_integration_id' => $integration->getKey(), 'event' => 'purchase',
         'external_action_id' => 'abc', 'active' => true,
     ]);
-    $this->artisan('health:check')->assertSuccessful();
-    $this->artisan('health:check')->assertSuccessful();
+    foreach (range(1, 4) as $_) {
+        $this->artisan('health:check')->assertSuccessful();
+    }
 
     Mail::assertSent(HealthAlertMail::class, fn (HealthAlertMail $m) => $m->recovered);
     Mail::assertSent(HealthAlertMail::class, 2);
+});
+
+it('requires consecutive clean runs before the recovered email and resets on relapse', function (): void {
+    $integration = healthIntegration(withMapping: false);
+    $this->artisan('health:check')->assertFailed();
+    Mail::assertSent(HealthAlertMail::class, 1);
+
+    $mapping = fn () => ConversionActionMapping::query()->create([
+        'platform_integration_id' => $integration->getKey(), 'event' => 'purchase',
+        'external_action_id' => 'abc', 'active' => true,
+    ]);
+    $created = $mapping();
+
+    $this->artisan('health:check')->assertSuccessful();
+    $this->artisan('health:check')->assertSuccessful(); // 2 clean runs
+    $created->delete();
+    $this->artisan('health:check')->assertFailed(); // relapse resets the counter
+    $created = $mapping();
+    $this->artisan('health:check')->assertSuccessful();
+    $this->artisan('health:check')->assertSuccessful();
+
+    expect(Mail::sent(HealthAlertMail::class, fn (HealthAlertMail $m) => $m->recovered))->toHaveCount(0);
+
+    $this->artisan('health:check')->assertSuccessful(); // 3rd consecutive clean run
+    expect(Mail::sent(HealthAlertMail::class, fn (HealthAlertMail $m) => $m->recovered))->toHaveCount(1);
 });
 
 it('does not email when ALERT_EMAIL is empty but still fails', function (): void {

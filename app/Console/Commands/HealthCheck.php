@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Actions\Tracking\ProcessTrackingEvent;
 use App\Enums\Platform;
 use App\Mail\HealthAlertMail;
 use App\Models\PlatformDelivery;
@@ -25,6 +26,8 @@ final class HealthCheck extends Command
 {
     private const ALERTING_CACHE_KEY = 'health:alerting';
 
+    private const CLEAN_RUNS_CACHE_KEY = 'health:clean_runs';
+
     protected $signature = 'health:check {--no-mail : Dry run, do not send or throttle emails}';
 
     protected $description = 'Check sync freshness, failed jobs, deliveries, mappings and queue backlog; email on problems';
@@ -35,6 +38,7 @@ final class HealthCheck extends Command
             'Google Ads click sync' => $this->checkGoogleAdsSync(...),
             'Failed queue jobs' => $this->checkFailedJobs(...),
             'Delivery failures' => $this->checkDeliveryFailures(...),
+            'Dead integrations' => $this->checkDeadIntegrations(...),
             'Integration mappings' => $this->checkMappings(...),
             'Queue backlog' => $this->checkQueueBacklog(...),
         ];
@@ -113,8 +117,17 @@ final class HealthCheck extends Command
         $minPercent = (int) config('alerts.delivery_failure_min_percent');
         $problems = [];
 
+        // Only `failed` rows whose retries are exhausted count. `partial_failure` is a
+        // terminal data condition (Google/Meta rejected the payload, never retried) that
+        // says nothing about integration health, and a `failed` row still inside the job's
+        // retry/backoff window may yet be delivered.
+        $tries = app(ProcessTrackingEvent::class)->tries;
+
         $stats = PlatformDelivery::query()
-            ->selectRaw("platform_integration_id, platform, COUNT(*) as total, SUM(CASE WHEN status IN ('failed','partial_failure') THEN 1 ELSE 0 END) as failures")
+            ->selectRaw(
+                "platform_integration_id, platform, COUNT(*) as total, SUM(CASE WHEN status = 'failed' AND (attempts >= ? OR updated_at <= ?) THEN 1 ELSE 0 END) as failures",
+                [$tries, now()->subMinutes(10)],
+            )
             ->where('created_at', '>=', now()->subHour())
             ->groupBy('platform_integration_id', 'platform')
             ->get();
@@ -124,6 +137,29 @@ final class HealthCheck extends Command
             $failures = (int) $row->getAttribute('failures');
             if ($failures >= $minCount && $failures * 100 >= $minPercent * $total) {
                 $problems['delivery:'.$row->platform_integration_id] = "{$failures} of {$total} {$row->platform} deliveries failed in the last hour (integration {$row->platform_integration_id}).";
+            }
+        }
+
+        return $problems;
+    }
+
+    /** @return array<string, string> */
+    private function checkDeadIntegrations(): array
+    {
+        $minCount = (int) config('alerts.dead_integration_min_deliveries');
+        $problems = [];
+
+        $stats = PlatformDelivery::query()
+            ->selectRaw("platform_integration_id, platform, COUNT(*) as total, SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered")
+            ->whereIn('platform_integration_id', PlatformIntegration::query()->where('active', true)->select('id'))
+            ->where('created_at', '>=', now()->subDay())
+            ->groupBy('platform_integration_id', 'platform')
+            ->get();
+
+        foreach ($stats as $row) {
+            $total = (int) $row->getAttribute('total');
+            if ($total >= $minCount && (int) $row->getAttribute('delivered') === 0) {
+                $problems['dead_integration:'.$row->platform_integration_id] = "{$row->platform} integration {$row->platform_integration_id} has {$total} deliveries in the last 24h and none delivered.";
             }
         }
 
@@ -169,14 +205,24 @@ final class HealthCheck extends Command
         }
 
         if ($problems === []) {
-            $previous = Cache::pull(self::ALERTING_CACHE_KEY);
+            // Send "recovered" only after several consecutive clean runs to avoid flapping.
+            $previous = Cache::get(self::ALERTING_CACHE_KEY);
             if (is_string($previous)) {
-                Cache::forget($previous);
-                Mail::to($to)->send(new HealthAlertMail([], recovered: true));
+                $clean = (int) Cache::get(self::CLEAN_RUNS_CACHE_KEY, 0) + 1;
+                if ($clean >= (int) config('alerts.recovery_runs')) {
+                    Cache::forget(self::ALERTING_CACHE_KEY);
+                    Cache::forget(self::CLEAN_RUNS_CACHE_KEY);
+                    Cache::forget($previous);
+                    Mail::to($to)->send(new HealthAlertMail([], recovered: true));
+                } else {
+                    Cache::put(self::CLEAN_RUNS_CACHE_KEY, $clean, now()->addDays(7));
+                }
             }
 
             return;
         }
+
+        Cache::forget(self::CLEAN_RUNS_CACHE_KEY);
 
         $keys = array_keys($problems);
         sort($keys);

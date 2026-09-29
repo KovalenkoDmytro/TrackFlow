@@ -88,8 +88,8 @@ final class ProcessTrackingEvent
      * Forward a single event to one platform integration and record the delivery attempt.
      *
      * Creates a PlatformDelivery row with status "queued" before the API call so a
-     * record exists even if the process dies mid-flight. Google Ads requires a gclid —
-     * events without one are silently skipped for that platform.
+     * record exists even if the process dies mid-flight. Google Ads requires a gclid and
+     * GA4 requires a client id — events without one are skipped for that platform.
      *
      * On failure the delivery and integration error fields are updated and the exception
      * is re-thrown to handle(), which defers it until every integration has been tried so
@@ -107,6 +107,17 @@ final class ProcessTrackingEvent
         TrackingEvent $trackingEvent,
     ): void {
         if ($integration->platform === Platform::GoogleAds && empty($data->gclid)) {
+            return;
+        }
+
+        // No _ga cookie (no consent / blocked): GA4 cannot attribute the event. This is
+        // a normal data condition, not a delivery failure, so no delivery row is created.
+        if ($integration->platform === Platform::GoogleAnalytics4 && empty($data->gaClientId)) {
+            Log::debug('ProcessTrackingEvent: skipping GA4, no client id', [
+                'shop' => $data->shopDomain,
+                'event' => $data->event,
+            ]);
+
             return;
         }
 
