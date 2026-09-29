@@ -17,7 +17,7 @@ function makeTrackingEventData(array $overrides = []): TrackingEventData
         event: $overrides['event'] ?? 'purchase',
         value: $overrides['value'] ?? 99.99,
         currency: $overrides['currency'] ?? 'USD',
-        transactionId: $overrides['transactionId'] ?? 'order-123',
+        transactionId: array_key_exists('transactionId', $overrides) ? $overrides['transactionId'] : 'order-123',
         gclid: $overrides['gclid'] ?? null,
         fbp: array_key_exists('fbp', $overrides) ? $overrides['fbp'] : 'fb.1.111.222',
         fbc: array_key_exists('fbc', $overrides) ? $overrides['fbc'] : null,
@@ -27,6 +27,7 @@ function makeTrackingEventData(array $overrides = []): TrackingEventData
         userAgent: $overrides['userAgent'] ?? 'Mozilla/5.0',
         idempotencyKey: $overrides['idempotencyKey'] ?? 'idem-key-1',
         occurredAt: $overrides['occurredAt'] ?? new DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        eventSourceUrl: $overrides['eventSourceUrl'] ?? null,
     );
 }
 
@@ -162,6 +163,118 @@ describe('MetaClient::uploadConversion', function (): void {
         );
 
         Http::assertSent(fn ($request) => $request->data()['test_event_code'] === 'TEST123');
+    });
+});
+
+describe('MetaClient::uploadConversion payload', function (): void {
+    function sendMetaEvent(array $overrides, string $metaEvent = 'Purchase', ?MetaClient $client = null): array
+    {
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['events_received' => 1, 'fbtrace_id' => 'TRACE1'], 200)]);
+
+        ($client ?? new MetaClient)->uploadConversion(
+            ['pixel_id' => '123', 'access_token' => 'token'],
+            makeTrackingEventData($overrides),
+            new ConversionActionMapping(['external_action_id' => $metaEvent]),
+        );
+
+        $sent = [];
+        Http::assertSent(function ($request) use (&$sent) {
+            $sent = $request->data()['data'][0];
+
+            return true;
+        });
+
+        return $sent;
+    }
+
+    it('sends event_source_url when available and omits it otherwise', function (): void {
+        $with = sendMetaEvent(['eventSourceUrl' => 'https://store.test/products/x?utm=1#f']);
+        $without = sendMetaEvent([]);
+
+        expect($with['event_source_url'])->toBe('https://store.test/products/x')
+            ->and($without)->not->toHaveKey('event_source_url');
+    });
+
+    it('omits custom_data when a non-purchase event has no real value', function (): void {
+        $search = sendMetaEvent(['event' => 'search', 'value' => 0.0], 'Search');
+        $view = sendMetaEvent(['event' => 'view_item', 'value' => 0.0], 'ViewContent');
+
+        expect($search)->not->toHaveKey('custom_data')
+            ->and($view)->not->toHaveKey('custom_data');
+    });
+
+    it('keeps value and currency for events with a positive value', function (): void {
+        foreach (['AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'AddShippingInfo'] as $name) {
+            $event = sendMetaEvent(['value' => 25.5, 'currency' => 'USD'], $name);
+
+            expect($event['custom_data'])->toBe(['currency' => 'USD', 'value' => 25.5]);
+        }
+    });
+
+    it('always sends value and currency for Purchase, even when the value is 0', function (): void {
+        $event = sendMetaEvent(['value' => 0.0, 'currency' => 'CAD']);
+
+        expect($event['custom_data'])->toBe(['currency' => 'CAD', 'value' => 0.0]);
+    });
+
+    it('does not change the event_id derivation', function (): void {
+        $event = sendMetaEvent(['transactionId' => null, 'event' => 'search'], 'Search');
+
+        expect($event['event_id'])->toBe(md5('Search|2026-01-01T00:00:00+00:00|idem-key-1'));
+    });
+});
+
+describe('MetaClient::uploadConversion response handling', function (): void {
+    $credentials = ['pixel_id' => '123', 'access_token' => 'secret-token-value'];
+    $mapping = fn () => new ConversionActionMapping(['external_action_id' => 'Purchase']);
+
+    it('records events_received and fbtrace_id as the delivery receipt on success', function () use ($credentials, $mapping): void {
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['events_received' => 1, 'messages' => [], 'fbtrace_id' => 'ABC123'], 200)]);
+        $client = new MetaClient;
+
+        expect($client->uploadConversion($credentials, makeTrackingEventData(), $mapping()))->toBeTrue()
+            ->and(json_decode((string) $client->deliveryReceipt(), true))->toBe(['events_received' => 1, 'fbtrace_id' => 'ABC123'])
+            ->and($client->deliveryReceipt())->not->toContain('secret-token-value')
+            ->and($client->partialFailure())->toBeNull();
+    });
+
+    it('treats a 2xx with events_received 0 as a failure with a reason', function () use ($credentials, $mapping): void {
+        Http::fake(['https://graph.facebook.com/*' => Http::response([
+            'events_received' => 0,
+            'messages' => ['Invalid event_source_url'],
+            'fbtrace_id' => 'TRACE9',
+        ], 200)]);
+        $client = new MetaClient;
+
+        expect($client->uploadConversion($credentials, makeTrackingEventData(), $mapping()))->toBeFalse()
+            ->and($client->deliveryReceipt())->toBeNull()
+            ->and($client->partialFailure()->primaryCode())->toBe('meta_no_events_received')
+            ->and($client->partialFailure()->lastError())->toBe('partial_failure: meta_no_events_received')
+            ->and(json_decode($client->partialFailure()->toJson(), true))->toMatchArray([
+                'codes' => ['meta_no_events_received'],
+                'message' => 'Invalid event_source_url',
+                'fbtrace_id' => 'TRACE9',
+            ]);
+    });
+
+    it('treats a 2xx without events_received (or non-JSON) as a failure', function () use ($credentials, $mapping): void {
+        Http::fake(['https://graph.facebook.com/*' => Http::response('<html>ok</html>', 200)]);
+        $client = new MetaClient;
+
+        expect($client->uploadConversion($credentials, makeTrackingEventData(), $mapping()))->toBeFalse()
+            ->and($client->partialFailure()->message)->toContain('events_received');
+    });
+
+    it('clears the previous outcome on the next call', function () use ($credentials, $mapping): void {
+        $client = new MetaClient;
+        Http::fake(['https://graph.facebook.com/*' => Http::sequence()
+            ->push(['events_received' => 0], 200)
+            ->push(['events_received' => 1], 200)]);
+        $client->uploadConversion($credentials, makeTrackingEventData(), $mapping());
+        $client->uploadConversion($credentials, makeTrackingEventData(), $mapping());
+
+        expect($client->partialFailure())->toBeNull()
+            ->and($client->deliveryReceipt())->not->toBeNull();
     });
 });
 

@@ -48,6 +48,20 @@ final class TrackEventRequest extends FormRequest
         return true; // authentication is handled by ConversionAuthenticator in the controller
     }
 
+    /**
+     * Reduce event_source_url to https origin + path before validation so a long or
+     * malformed URL (query strings, http, garbage) is dropped instead of rejecting the
+     * whole conversion event.
+     */
+    protected function prepareForValidation(): void
+    {
+        $url = $this->input('event_source_url');
+
+        if (is_string($url)) {
+            $this->merge(['event_source_url' => TrackingEventData::normalizeSourceUrl($url)]);
+        }
+    }
+
     /** @return array<string, array<int, string>> */
     public function rules(): array
     {
@@ -64,6 +78,7 @@ final class TrackEventRequest extends FormRequest
             'ttclid' => ['sometimes', 'nullable', 'string'],
             'ga_client_id' => ['sometimes', 'nullable', 'string'],
             'idempotency_key' => ['sometimes', 'nullable', 'string'],
+            'event_source_url' => ['sometimes', 'nullable', 'url:https', 'max:2048'],
             'occurred_at' => [
                 'sometimes',
                 'nullable',
@@ -123,6 +138,7 @@ final class TrackEventRequest extends FormRequest
             userAgent: $this->userAgent(),
             idempotencyKey: $validated['idempotency_key'] ?? null,
             occurredAt: $occurredAt,
+            eventSourceUrl: $validated['event_source_url'] ?? null,
         );
     }
 }

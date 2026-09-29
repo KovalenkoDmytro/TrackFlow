@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Tracking;
 
 use App\Contracts\PlatformResolverContract;
+use App\Contracts\ReportsDeliveryReceipt;
 use App\Contracts\ReportsPartialFailure;
 use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
@@ -164,9 +165,14 @@ final class ProcessTrackingEvent
 
         try {
             $platform = $this->resolver->resolve($integration->platform);
-            $success = $platform->uploadConversion($credentials, $data, $mapping);
+            // Recover a click id lost after the landing page, for the Meta payload only.
+            $payload = $integration->platform === Platform::Meta
+                ? ResolveMetaFbc::make()->handle($data, (int) $integration->user_id)
+                : $data;
+            $success = $platform->uploadConversion($credentials, $payload, $mapping);
 
             $failure = ! $success && $platform instanceof ReportsPartialFailure ? $platform->partialFailure() : null;
+            $receipt = $success && $platform instanceof ReportsDeliveryReceipt ? $platform->deliveryReceipt() : null;
 
             $delivery->update([
                 'status' => $success ? 'delivered' : 'partial_failure',
@@ -176,6 +182,7 @@ final class ProcessTrackingEvent
                     'response_code' => $failure->httpStatus,
                     'response_body' => $failure->toJson(),
                 ] : []),
+                ...($receipt !== null ? ['response_code' => 200, 'response_body' => $receipt] : []),
             ]);
 
             $integration->last_success_at = $success ? now() : $integration->last_success_at;

@@ -21,7 +21,26 @@ final readonly class PartialFailure
         public array $codes,
         public string $message,
         public int $httpStatus = 200,
+        public ?string $traceId = null,
     ) {}
+
+    /**
+     * Build from a Meta Conversions API 2xx response that did not confirm receipt
+     * (`events_received` missing or 0). Only the trimmed `messages` and the fbtrace_id
+     * (an opaque support reference, not PII) are kept.
+     *
+     * @param  array<string, mixed>  $body  Decoded response body.
+     */
+    public static function fromMeta(array $body, int $httpStatus = 200): self
+    {
+        $messages = is_array($body['messages'] ?? null)
+            ? array_values(array_filter($body['messages'], is_string(...)))
+            : [];
+        $message = $messages === [] ? 'Meta did not confirm receipt of the event (events_received missing or 0).' : implode('; ', $messages);
+        $traceId = is_string($body['fbtrace_id'] ?? null) ? mb_substr($body['fbtrace_id'], 0, 64) : null;
+
+        return new self(['meta_no_events_received'], self::sanitize($message, []), $httpStatus, $traceId);
+    }
 
     /**
      * Parse a Google Ads `partialFailureError` object (google.rpc.Status shape).
@@ -81,7 +100,7 @@ final readonly class PartialFailure
     {
         $message = $this->message;
         do {
-            $json = (string) json_encode(['codes' => array_slice($this->codes, 0, 10), 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $json = (string) json_encode(['codes' => array_slice($this->codes, 0, 10), 'message' => $message] + ($this->traceId !== null ? ['fbtrace_id' => $this->traceId] : []), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $message = mb_substr($message, 0, max(0, mb_strlen($message) - 50));
         } while (strlen($json) > 1024 && $message !== '');
 

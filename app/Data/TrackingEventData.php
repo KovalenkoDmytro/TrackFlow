@@ -35,6 +35,14 @@ final class TrackingEventData extends Data
     public readonly ?string $gclid;
 
     /**
+     * Page URL the event fired on, normalized to https origin + path (see normalizeSourceUrl()).
+     *
+     * Travels in the queued job payload (this DTO is serialised onto the queue and
+     * ProcessTrackingEvent never reloads it from the database), so it needs no column.
+     */
+    public readonly ?string $eventSourceUrl;
+
+    /**
      * @param  string  $shopDomain  Shopify shop domain (e.g. "example.myshopify.com"). Used to resolve the User record.
      * @param  string  $event  Shopify e-commerce event name (e.g. "purchase", "add_to_cart").
      * @param  float  $value  Monetary value of the conversion. 0.0 for non-purchase events.
@@ -49,6 +57,7 @@ final class TrackingEventData extends Data
      * @param  string|null  $userAgent  Client User-Agent string for device/browser enrichment.
      * @param  string|null  $idempotencyKey  Unique key for the conversion event, used to prevent double-counting on retries.
      * @param  DateTimeImmutable  $occurredAt  Timestamp of the event on the storefront, in the shop's timezone.
+     * @param  string|null  $eventSourceUrl  Storefront page URL for Meta's event_source_url. Reduced to https origin + path; anything else becomes null.
      */
     public function __construct(
         public readonly string $shopDomain,
@@ -65,8 +74,63 @@ final class TrackingEventData extends Data
         public readonly ?string $userAgent,
         public readonly ?string $idempotencyKey,
         public readonly DateTimeImmutable $occurredAt,
+        ?string $eventSourceUrl = null,
     ) {
         $trimmedGclid = $gclid !== null ? trim($gclid) : null;
         $this->gclid = $trimmedGclid === null || $trimmedGclid === '' ? null : $trimmedGclid;
+        $this->eventSourceUrl = self::normalizeSourceUrl($eventSourceUrl);
+    }
+
+    /**
+     * Copy of this event carrying the given fbc (used for the Meta send only).
+     */
+    public function withFbc(?string $fbc): self
+    {
+        return new self(
+            shopDomain: $this->shopDomain,
+            event: $this->event,
+            value: $this->value,
+            currency: $this->currency,
+            transactionId: $this->transactionId,
+            gclid: $this->gclid,
+            fbp: $this->fbp,
+            fbc: $fbc,
+            ttclid: $this->ttclid,
+            gaClientId: $this->gaClientId,
+            ip: $this->ip,
+            userAgent: $this->userAgent,
+            idempotencyKey: $this->idempotencyKey,
+            occurredAt: $this->occurredAt,
+            eventSourceUrl: $this->eventSourceUrl,
+        );
+    }
+
+    /**
+     * Reduce a URL to `https://host[:port]/path`; null when it is not a plain https URL.
+     *
+     * Query string, fragment and credentials are always dropped (they can carry tokens or
+     * click ids), and paths under checkout/order/account style prefixes are truncated
+     * because the next segment is a private token (/checkouts/cn/<token>/thank-you).
+     */
+    public static function normalizeSourceUrl(?string $url): ?string
+    {
+        if ($url === null) {
+            return null;
+        }
+
+        $parts = parse_url(trim($url));
+
+        if (! is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || ! isset($parts['host'])
+            || isset($parts['user']) || isset($parts['pass'])) {
+            return null;
+        }
+
+        $path = $parts['path'] ?? '/';
+
+        if (preg_match('#^((?:/[a-z]{2}(?:-[a-z]{2})?)?/(?:checkouts|orders|gift_cards|account))(?:/|$)#i', $path, $m) === 1) {
+            $path = $m[1];
+        }
+
+        return 'https://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '').$path;
     }
 }
