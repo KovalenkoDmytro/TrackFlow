@@ -45,7 +45,12 @@ final class SyncGoogleAdsClicks extends Command
                 Log::warning("google-ads:sync-clicks: sync already running for integration {$integration->id}, skipping.");
                 $this->comment("Integration {$integration->id}: sync already running, skipping.");
             } catch (\Throwable $e) {
-                // Do not print upstream responses or credentials to scheduler logs.
+                Log::error('google-ads:sync-clicks failed', [
+                    'integration' => $integration->getKey(),
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
+                // Do not print upstream responses or credentials to the console.
                 $this->error("Integration {$integration->id}: click matching failed. Check Google Ads access and retry.");
                 $failed = true;
             }
