@@ -664,7 +664,16 @@ return [
     |
     */
 
-    'dev_auth_bypass' => (bool) env('SHOPIFY_DEV_AUTH_BYPASS', false),
+    // Raw flag as written in .env. Read ONLY by the fatal boot guard in
+    // AppServiceProvider so a misconfigured server is detected. Never use it
+    // to enable behaviour; use `dev_auth_bypass` below.
+    'dev_auth_bypass_requested' => (bool) env('SHOPIFY_DEV_AUTH_BYPASS', false),
+
+    // Effective flag: inert unless APP_ENV is literally "local", so a stray
+    // SHOPIFY_DEV_AUTH_BYPASS=true can never take effect (auth middleware) or
+    // drop App Bridge from the SPA shell in staging/production. Uses env() inside
+    // the config file, which is safe with `config:cache`.
+    'dev_auth_bypass' => env('APP_ENV') === 'local' && (bool) env('SHOPIFY_DEV_AUTH_BYPASS', false),
 
     'dev_shop_domain' => env('SHOPIFY_DEV_SHOP_DOMAIN'),
 ];

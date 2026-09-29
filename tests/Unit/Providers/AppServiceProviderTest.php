@@ -115,3 +115,25 @@ describe('AppServiceProvider: Shopify credential safety guard', function (): voi
         expect(fn () => $provider->boot())->not->toThrow(RuntimeException::class);
     });
 });
+
+describe('AppServiceProvider: dev auth bypass boot guard', function (): void {
+    afterEach(fn () => app()->detectEnvironment(fn () => 'testing'));
+
+    it('still refuses to boot outside local when the raw env flag is on, even though the effective flag is forced off', function (): void {
+        app()->detectEnvironment(fn () => 'production');
+        config(['shopify-app.dev_auth_bypass_requested' => true, 'shopify-app.dev_auth_bypass' => false]);
+
+        $provider = new AppServiceProvider(app());
+
+        expect(fn () => $provider->boot())->toThrow(RuntimeException::class, 'SHOPIFY_DEV_AUTH_BYPASS');
+    });
+
+    it('boots in the local environment with the raw flag on', function (): void {
+        app()->detectEnvironment(fn () => 'local');
+        config(['shopify-app.dev_auth_bypass_requested' => true]);
+
+        $provider = new AppServiceProvider(app());
+
+        expect(fn () => $provider->boot())->not->toThrow(RuntimeException::class);
+    });
+});
