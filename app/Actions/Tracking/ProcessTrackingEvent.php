@@ -65,8 +65,22 @@ final class ProcessTrackingEvent
             ->where('active', true)
             ->get();
 
+        // Isolate failures per integration so one platform's error cannot stop later
+        // integrations from receiving the event. The first failure is re-thrown after
+        // the loop so the queue still retries; on retry, integrations that already
+        // reached a terminal delivery status are skipped (see processIntegration()).
+        $firstFailure = null;
+
         foreach ($integrations as $integration) {
-            $this->processIntegration($integration, $data, $trackingEvent);
+            try {
+                $this->processIntegration($integration, $data, $trackingEvent);
+            } catch (\Throwable $e) {
+                $firstFailure ??= $e;
+            }
+        }
+
+        if ($firstFailure !== null) {
+            throw $firstFailure;
         }
     }
 
@@ -77,10 +91,15 @@ final class ProcessTrackingEvent
      * record exists even if the process dies mid-flight. Google Ads requires a gclid —
      * events without one are silently skipped for that platform.
      *
-     * On RuntimeException the delivery and integration error fields are updated and the
-     * exception is re-thrown so the job queue retries with backoff. Partial failures
-     * (returned as false) are recorded but do not trigger a retry — they represent data
-     * issues that would fail identically on every attempt.
+     * On failure the delivery and integration error fields are updated and the exception
+     * is re-thrown to handle(), which defers it until every integration has been tried so
+     * the job queue retries with backoff. Partial failures (returned as false) are recorded
+     * but do not trigger a retry — they represent data issues that would fail identically
+     * on every attempt.
+     *
+     * Retry-safe: an existing delivery row for this event + integration in a terminal
+     * status (delivered / partial_failure) is skipped, and a "queued"/"failed" row left by
+     * an earlier attempt is reused instead of inserting a duplicate.
      */
     private function processIntegration(
         PlatformIntegration $integration,
@@ -106,13 +125,27 @@ final class ProcessTrackingEvent
             return;
         }
 
-        // Create delivery record before attempting the API call
-        $delivery = PlatformDelivery::query()->create([
-            'tracking_event_id' => $trackingEvent->getKey(),
-            'platform_integration_id' => $integration->getKey(),
-            'platform' => $integration->platform->value,
-            'status' => 'queued',
-        ]);
+        $delivery = PlatformDelivery::query()
+            ->where('tracking_event_id', $trackingEvent->getKey())
+            ->where('platform_integration_id', $integration->getKey())
+            ->latest('id')
+            ->first();
+
+        if ($delivery instanceof PlatformDelivery && in_array($delivery->status, ['delivered', 'partial_failure'], true)) {
+            return;
+        }
+
+        // Create delivery record before attempting the API call (reused on retry)
+        if ($delivery instanceof PlatformDelivery) {
+            $delivery->update(['status' => 'queued']);
+        } else {
+            $delivery = PlatformDelivery::query()->create([
+                'tracking_event_id' => $trackingEvent->getKey(),
+                'platform_integration_id' => $integration->getKey(),
+                'platform' => $integration->platform->value,
+                'status' => 'queued',
+            ]);
+        }
 
         $credentials = json_decode($integration->credentials, true);
 
@@ -140,7 +173,7 @@ final class ProcessTrackingEvent
                 'event' => $data->event,
                 'success' => $success,
             ]);
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
             $delivery->update([
                 'status' => 'failed',
                 'attempts' => $delivery->attempts + 1,

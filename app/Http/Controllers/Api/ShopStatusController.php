@@ -20,6 +20,15 @@ final class ShopStatusController extends Controller
     {
         $shop = $request->user();
 
+        // The shop row can vanish after auth resolved it (uninstall / redact webhook race).
+        // Answer like the auth middleware does for an uninstalled shop instead of a 500.
+        if ($shop === null) {
+            return response()->json([
+                'message' => 'Shopify session token rejected: shop_not_installed.',
+                'code' => 'shop_not_installed',
+            ], 401);
+        }
+
         $integrations = $shop->platformIntegrations()
             ->where('active', true)
             ->get()

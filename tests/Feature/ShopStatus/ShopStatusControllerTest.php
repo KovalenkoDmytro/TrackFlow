@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\ShopStatusController;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 describe('GET /api/shop-status', function (): void {
     it('returns 401 for unauthenticated requests', function (): void {
@@ -46,5 +48,12 @@ describe('GET /api/shop-status', function (): void {
                 'pixel_enabled' => false,
             ],
         ]);
+    });
+
+    it('returns 401 shop_not_installed instead of a 500 when the shop no longer exists', function (): void {
+        $response = (new ShopStatusController)->index(Request::create('/api/shop-status'));
+
+        expect($response->getStatusCode())->toBe(401)
+            ->and($response->getData(true)['code'])->toBe('shop_not_installed');
     });
 });

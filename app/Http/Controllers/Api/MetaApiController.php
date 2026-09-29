@@ -11,6 +11,8 @@ use App\Models\PlatformIntegration;
 use App\Services\MetaClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * JSON API surface for the Meta (Facebook/Instagram) Conversions API settings page in the React SPA.
@@ -80,9 +82,9 @@ final class MetaApiController extends Controller
      * Validate, test, and persist Meta credentials for the authenticated shop.
      *
      * Validates credentials with MetaClient::testCredentials() before saving so
-     * the merchant receives immediate feedback on invalid credentials. Dispatches
-     * CreateConversionActions as a background job on success to persist the
-     * event name mappings.
+     * the merchant receives immediate feedback on invalid credentials. Runs
+     * CreateConversionActions synchronously on success to persist the event name
+     * mappings; on failure the integration change is rolled back and a 500 returned.
      */
     public function store(Request $request): JsonResponse
     {
@@ -124,19 +126,43 @@ final class MetaApiController extends Controller
             ], 422);
         }
 
-        $integration = PlatformIntegration::query()->updateOrCreate(
-            [
-                'user_id' => $shop->getKey(),
-                'platform' => Platform::Meta,
-            ],
-            [
-                'active' => true,
-                'credentials' => json_encode($credentials),
-                'settings' => [],
-            ],
-        );
+        // Provision mappings synchronously in the same transaction as the integration
+        // upsert: Meta setup is local-only (no remote calls), and a queued job that fails
+        // silently leaves an "active" integration with no mappings, so every event is
+        // skipped forever. On failure nothing is persisted and the merchant sees an error.
+        try {
+            $integration = DB::transaction(function () use ($shop, $credentials): PlatformIntegration {
+                $integration = PlatformIntegration::query()->updateOrCreate(
+                    [
+                        'user_id' => $shop->getKey(),
+                        'platform' => Platform::Meta,
+                    ],
+                    [
+                        'active' => true,
+                        'credentials' => json_encode($credentials),
+                        'settings' => [],
+                    ],
+                );
 
-        CreateConversionActions::dispatch($integration);
+                CreateConversionActions::run($integration);
+
+                // MetaClient logs and swallows per-row upsert failures, so verify the result.
+                if (! $integration->conversionActionMappings()->where('active', true)->exists()) {
+                    throw new \RuntimeException('No conversion action mappings were created.');
+                }
+
+                return $integration;
+            });
+        } catch (\Throwable $e) {
+            Log::error('MetaApiController: failed to set up Meta conversion actions', [
+                'shop' => $shop->name,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Meta credentials are valid, but event setup failed. Please try again or contact support.',
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,

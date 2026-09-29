@@ -14,15 +14,17 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import type { PlatformDeliveryStat, PlatformDeliveryTotals } from '../../../types/api';
+import type { PlatformDeliveryStat, PlatformDeliveryTotals, PlatformIntegrationState } from '../../../types/api';
 
 interface PlatformDeliveryTableProps {
   stats: PlatformDeliveryStat[];
   totals: PlatformDeliveryTotals;
   loading: boolean;
+  platformLabel?: string;
+  integration?: PlatformIntegrationState;
 }
 
-export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDeliveryTableProps) {
+export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 'Meta', integration }: PlatformDeliveryTableProps) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -33,11 +35,18 @@ export function PlatformDeliveryTable({ stats, totals, loading }: PlatformDelive
 
   const hasNoDeliveries = totals.attempted === 0;
 
+  let emptyMessage = `No events delivered to ${platformLabel} in this period. Make sure the ${platformLabel} integration is active.`;
+  if (integration && !integration.active) {
+    emptyMessage = `${platformLabel} is not connected. Connect it in Settings to start sending events.`;
+  } else if (integration && integration.active_mappings === 0) {
+    emptyMessage = `${platformLabel} is connected but has no event mappings. Reconnect it in Settings or contact support.`;
+  }
+
   return (
     <Box>
       {hasNoDeliveries && (
         <Alert severity="info" sx={{ m: 2 }}>
-          No events delivered to Meta in this period. Make sure the Meta integration is active.
+          {emptyMessage}
         </Alert>
       )}
 
