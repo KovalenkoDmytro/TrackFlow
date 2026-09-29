@@ -16,7 +16,13 @@ return [
     // Google Ads click sync: newest successful sync older than this is a problem.
     'google_ads_sync_max_age_hours' => (int) env('ALERT_GOOGLE_ADS_SYNC_MAX_AGE_HOURS', 3),
 
-    // Delivery failures per integration within the last hour.
+    // Consecutive clean health:check runs required before the "recovered" email is sent.
+    'recovery_runs' => (int) env('ALERT_RECOVERY_RUNS', 3),
+
+    // Active integration with at least this many delivery rows in 24h and none delivered.
+    'dead_integration_min_deliveries' => (int) env('ALERT_DEAD_INTEGRATION_MIN_DELIVERIES', 10),
+
+    // Delivery failures (retries exhausted; partial_failure excluded) per integration within the last hour.
     'delivery_failure_min_count' => (int) env('ALERT_DELIVERY_FAILURE_MIN_COUNT', 5),
     'delivery_failure_min_percent' => (int) env('ALERT_DELIVERY_FAILURE_MIN_PERCENT', 50),
 

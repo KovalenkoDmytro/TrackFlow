@@ -438,11 +438,12 @@ sudo systemctl reload nginx
 
 - Google Ads click sync: no successful sync for an active integration within `ALERT_GOOGLE_ADS_SYNC_MAX_AGE_HOURS` (default 3).
 - New rows in `failed_jobs` in the last hour (job class names only).
-- Delivery failures in the last hour per integration (>= 5 and >= 50% of attempts by default).
+- Delivery failures in the last hour per integration (>= 5 and >= 50% of attempts by default). Only `failed` rows whose retries are exhausted count; `partial_failure` (a rejected payload or missing data, never retried) does not. GA4 events without a `_ga` client id are skipped without creating a delivery row.
+- Dead integrations: an active integration with >= `ALERT_DEAD_INTEGRATION_MIN_DELIVERIES` (default 10) delivery rows in 24h and none `delivered`.
 - Active integrations with no active conversion action mappings.
 - Queue backlog: oldest pending job older than 15 minutes (worker likely down).
 
-Same problem set is re-sent at most every `ALERT_THROTTLE_HOURS` (default 6); one "recovered" email follows when everything clears. Emails are sent synchronously (not via the queue).
+Same problem set is re-sent at most every `ALERT_THROTTLE_HOURS` (default 6); one "recovered" email follows after `ALERT_RECOVERY_RUNS` (default 3) consecutive clean runs. Emails are sent synchronously (not via the queue).
 
 Server env vars: `ALERT_EMAIL` (recipient), working `MAIL_*` settings, `SENTRY_LARAVEL_DSN` (backend error reporting; empty = off), optionally `HEALTHCHECK_PING_URL`, `SENTRY_TRACES_SAMPLE_RATE` (default 0), `SENTRY_RELEASE` and the `ALERT_*` thresholds listed in `.env.example`. After changing env values run `php artisan config:clear` and restart Octane (`php artisan octane:reload`, or restart the supervisor program), otherwise workers keep the old config.
 

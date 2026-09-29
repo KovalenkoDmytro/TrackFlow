@@ -39,7 +39,7 @@ final class FakePlatformDriver implements ConversionPlatformContract
     }
 }
 
-function fakeTrackingData(User $shop, ?string $gclid = 'gclid-1'): TrackingEventData
+function fakeTrackingData(User $shop, ?string $gclid = 'gclid-1', ?string $gaClientId = null): TrackingEventData
 {
     return new TrackingEventData(
         shopDomain: $shop->name,
@@ -51,7 +51,7 @@ function fakeTrackingData(User $shop, ?string $gclid = 'gclid-1'): TrackingEvent
         fbp: 'fb.1.1',
         fbc: null,
         ttclid: null,
-        gaClientId: null,
+        gaClientId: $gaClientId,
         ip: '127.0.0.1',
         userAgent: 'test',
         idempotencyKey: 'idem-1',
@@ -185,5 +185,28 @@ describe('ProcessTrackingEvent', function (): void {
         app(ProcessTrackingEvent::class)->handle(fakeTrackingData($this->shop, gclid: null));
 
         expect($googleDriver->uploads)->toBe(0)->and(PlatformDelivery::query()->count())->toBe(0);
+    });
+
+    it('skips GA4 events without a client id, creating no delivery row', function (): void {
+        $ga4 = connectFakeIntegration($this->shop, Platform::GoogleAnalytics4);
+        $driver = new FakePlatformDriver(false);
+        bindFakeResolver(['ga4' => $driver]);
+
+        app(ProcessTrackingEvent::class)->handle(fakeTrackingData($this->shop));
+
+        expect($driver->uploads)->toBe(0)
+            ->and(PlatformDelivery::query()->count())->toBe(0)
+            ->and($ga4->fresh()->last_error)->toBeNull();
+    });
+
+    it('delivers GA4 events that have a client id', function (): void {
+        connectFakeIntegration($this->shop, Platform::GoogleAnalytics4);
+        $driver = new FakePlatformDriver(true);
+        bindFakeResolver(['ga4' => $driver]);
+
+        app(ProcessTrackingEvent::class)->handle(fakeTrackingData($this->shop, gaClientId: '123.456'));
+
+        expect($driver->uploads)->toBe(1)
+            ->and(PlatformDelivery::query()->value('status'))->toBe('delivered');
     });
 });
