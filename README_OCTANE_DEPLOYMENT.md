@@ -432,6 +432,24 @@ sudo systemctl start php8.4-fpm
 sudo systemctl reload nginx
 ```
 
+## Monitoring & alerts
+
+`php artisan health:check` runs hourly from the Laravel scheduler and emails one summary when something breaks or silently stops:
+
+- Google Ads click sync: no successful sync for an active integration within `ALERT_GOOGLE_ADS_SYNC_MAX_AGE_HOURS` (default 3).
+- New rows in `failed_jobs` in the last hour (job class names only).
+- Delivery failures in the last hour per integration (>= 5 and >= 50% of attempts by default).
+- Active integrations with no active conversion action mappings.
+- Queue backlog: oldest pending job older than 15 minutes (worker likely down).
+
+Same problem set is re-sent at most every `ALERT_THROTTLE_HOURS` (default 6); one "recovered" email follows when everything clears. Emails are sent synchronously (not via the queue).
+
+Server env vars: `ALERT_EMAIL` (recipient), working `MAIL_*` settings, `SENTRY_LARAVEL_DSN` (backend error reporting; empty = off), optionally `HEALTHCHECK_PING_URL`, `SENTRY_TRACES_SAMPLE_RATE` (default 0), `SENTRY_RELEASE` and the `ALERT_*` thresholds listed in `.env.example`. After changing env values run `php artisan config:clear` and restart Octane (`php artisan octane:reload`, or restart the supervisor program), otherwise workers keep the old config.
+
+Manual dry run (no email, exit code 1 if any problem): `php artisan health:check --no-mail`
+
+Limitation: `health:check` is started by the scheduler, so it cannot detect a dead scheduler or a dead server. To cover that, create a dead-man's-switch check in an external monitor (Healthchecks.io, Cronitor, etc.) expecting a ping every hour and set `HEALTHCHECK_PING_URL` to its URL. `health:check` sends an HTTP GET (5 s timeout, failures ignored) only after a fully healthy run, so the external monitor also alerts on unhealthy runs.
+
 ## Resources
 
 - **Laravel Octane Docs**: https://laravel.com/docs/octane

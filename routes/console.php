@@ -23,3 +23,7 @@ Schedule::command('tracking:prune')
 // matches retained events collected before a shop connected its Ads account.
 Schedule::command('google-ads:sync-clicks --days=3')->hourly()->withoutOverlapping(120);
 Schedule::command('google-ads:sync-clicks --days=90')->dailyAt('04:15')->withoutOverlapping(180);
+
+// Emails the owner about silent failures (stale sync, failed jobs, empty mappings,
+// stuck queue). Cannot detect a dead scheduler itself; see HEALTHCHECK_PING_URL.
+Schedule::command('health:check')->hourly()->withoutOverlapping(30);
