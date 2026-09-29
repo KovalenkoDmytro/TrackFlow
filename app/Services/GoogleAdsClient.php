@@ -360,7 +360,13 @@ final class GoogleAdsClient implements ConversionPlatformContract
             $response = Http::withHeaders($this->buildHeaders($accessToken, $credentials))
                 ->timeout(60)->post("https://googleads.googleapis.com/v24/customers/{$customerId}/googleAds:search", $body);
             if (! $response->successful()) {
-                throw new \RuntimeException('Google Ads click report is unavailable. Check account access and try again.');
+                // Surface status and Google's reason so failures are diagnosable, while
+                // scrubbing anything token-like and bounding the length.
+                $reason = $this->extractApiError($response->json(), $response->body());
+                $reason = str_replace($accessToken, '[redacted]', $reason);
+                $reason = (string) preg_replace('/Bearer\s+\S+/i', 'Bearer [redacted]', $reason);
+
+                throw new \RuntimeException("Google Ads report failed [{$response->status()}]: ".substr($reason, 0, 500));
             }
             $payload = $response->json();
             if (! is_array($payload) || ! is_array($payload['results'] ?? [])) {

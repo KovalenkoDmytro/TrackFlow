@@ -58,7 +58,7 @@ final class GoogleAdsClickSync
                         continue;
                     }
                     // Hashes preserve case-sensitive matching on MySQL's default collation.
-                    $hash = hash('sha256', $gclid);
+                    $hash = hash('sha256', trim($gclid));
                     $clicks[$hash] = [
                         'platform_integration_id' => $integration->id,
                         'customer_id' => $customerId,
