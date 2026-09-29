@@ -64,6 +64,7 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
 
   const credentials = query.data?.credentials;
   const hasAccessToken = credentials?.has_access_token ?? false;
+  const hasTestEventCode = credentials?.has_test_event_code ?? false;
 
   async function onSubmit(data: MetaFormData) {
     setSuccessMessage(null);
@@ -103,6 +104,14 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
       {form.formState.errors.root && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {form.formState.errors.root.message}
+        </Alert>
+      )}
+
+      {hasTestEventCode && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          A Test Event Code is set. While it is set, events are only visible in Meta Events Manager →
+          Test Events and do not count toward reporting or ad optimization. Clear the Test Event Code
+          below and save to send live events.
         </Alert>
       )}
 
