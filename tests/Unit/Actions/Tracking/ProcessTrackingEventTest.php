@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Fake platform driver whose upload behaviour is controlled per platform by the test.
  */
-final class FakePlatformDriver implements ConversionPlatformContract
+class FakePlatformDriver implements ConversionPlatformContract
 {
     public int $uploads = 0;
 
@@ -250,5 +250,35 @@ describe('ProcessTrackingEvent', function (): void {
 
         expect($driver->uploads)->toBe(1)
             ->and(PlatformDelivery::query()->value('status'))->toBe('delivered');
+    });
+});
+
+describe('ProcessTrackingEvent Meta enrichment', function (): void {
+    it('passes only the Meta driver an fbc recovered for the same shop and fbp', function (): void {
+        $shop = User::factory()->create();
+        connectFakeIntegration($shop, Platform::Meta);
+        TrackingEvent::factory()->forUser($shop)->create(['fbp' => 'fb.1.1', 'fbc' => 'fb.1.9.CLICK']);
+
+        $driver = new class extends FakePlatformDriver
+        {
+            public ?string $fbc = null;
+
+            public function __construct()
+            {
+                parent::__construct(true);
+            }
+
+            public function uploadConversion(array $credentials, TrackingEventData $data, ConversionActionMapping $mapping): bool
+            {
+                $this->fbc = $data->fbc;
+
+                return parent::uploadConversion($credentials, $data, $mapping);
+            }
+        };
+        bindFakeResolver(['meta' => $driver]);
+
+        app(ProcessTrackingEvent::class)->handle(fakeTrackingData($shop));
+
+        expect($driver->fbc)->toBe('fb.1.9.CLICK');
     });
 });

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Contracts\ConversionPlatformContract;
+use App\Contracts\ReportsDeliveryReceipt;
+use App\Contracts\ReportsPartialFailure;
+use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
@@ -19,8 +22,12 @@ use Illuminate\Support\Facades\Log;
  * provisioning step exists (unlike Google Ads conversion actions). The class is
  * intentionally final — extension happens through the contract, not inheritance.
  */
-final class MetaClient implements ConversionPlatformContract
+final class MetaClient implements ConversionPlatformContract, ReportsDeliveryReceipt, ReportsPartialFailure
 {
+    private ?PartialFailure $partialFailure = null;
+
+    private ?string $deliveryReceipt = null;
+
     /**
      * Shopify e-commerce events mapped to their Meta event names.
      *
@@ -43,6 +50,8 @@ final class MetaClient implements ConversionPlatformContract
         'remove_from_cart' => 'RemoveFromCart',
         'add_shipping_info' => 'AddShippingInfo',
     ];
+
+    private const string PURCHASE_EVENT_NAME = 'Purchase';
 
     private const string GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
 
@@ -174,6 +183,10 @@ final class MetaClient implements ConversionPlatformContract
      * @param  TrackingEventData  $data  Event payload.
      * @param  ConversionActionMapping  $mapping  The mapping row whose external_action_id is the Meta event name.
      *
+     * A 2xx response only counts as delivered when Meta confirms `events_received` >= 1;
+     * otherwise false is returned with the reason available via partialFailure(). On
+     * success deliveryReceipt() holds events_received and fbtrace_id.
+     *
      * @throws \RuntimeException On non-2xx HTTP response (job will retry).
      */
     public function uploadConversion(
@@ -181,6 +194,9 @@ final class MetaClient implements ConversionPlatformContract
         TrackingEventData $data,
         ConversionActionMapping $mapping,
     ): bool {
+        $this->partialFailure = null;
+        $this->deliveryReceipt = null;
+
         if ($data->fbp === null && $data->fbc === null && $data->ip === null) {
             return false;
         }
@@ -194,10 +210,13 @@ final class MetaClient implements ConversionPlatformContract
             'fbc' => $data->fbc,
         ], static fn (?string $v) => $v !== null);
 
-        $customData = array_filter([
-            'currency' => $data->currency,
-            'value' => $data->value,
-        ], static fn (mixed $v) => $v !== null);
+        // Value/currency are only meaningful with a real amount: the DTO defaults to 0 CAD
+        // when the pixel sent none, and reporting that would skew value reporting.
+        // Purchase always carries both (Meta requires them), even for a 0.00 order.
+        $customData = [];
+        if ($data->value > 0 || $metaEventName === self::PURCHASE_EVENT_NAME) {
+            $customData = ['currency' => $data->currency, 'value' => $data->value];
+        }
 
         $eventId = $data->transactionId ?? md5(
             $metaEventName.'|'.$data->occurredAt->format(\DateTimeInterface::ATOM).'|'.($data->idempotencyKey ?? ''),
@@ -209,8 +228,15 @@ final class MetaClient implements ConversionPlatformContract
             'action_source' => 'website',
             'event_id' => $eventId,
             'user_data' => $userData,
-            'custom_data' => $customData,
         ];
+
+        if ($data->eventSourceUrl !== null) {
+            $event['event_source_url'] = $data->eventSourceUrl;
+        }
+
+        if ($customData !== []) {
+            $event['custom_data'] = $customData;
+        }
 
         $body = ['data' => [$event]];
 
@@ -223,12 +249,47 @@ final class MetaClient implements ConversionPlatformContract
         ]), $body);
 
         if ($response->successful()) {
-            return true;
+            return $this->recordReceipt($response->json(), $response->status());
         }
 
         $status = $response->status();
         $errorMessage = $this->extractApiError($response->json(), $response->body());
         throw new \RuntimeException("Meta CAPI error [{$status}]: {$errorMessage}");
+    }
+
+    public function partialFailure(): ?PartialFailure
+    {
+        return $this->partialFailure;
+    }
+
+    public function deliveryReceipt(): ?string
+    {
+        return $this->deliveryReceipt;
+    }
+
+    /**
+     * Interpret a 2xx Conversions API response: delivered only when Meta reports at
+     * least one received event. The receipt keeps only events_received and fbtrace_id.
+     *
+     * @param  mixed  $body  Decoded JSON body (null for empty or non-JSON responses).
+     */
+    private function recordReceipt(mixed $body, int $status): bool
+    {
+        $body = is_array($body) ? $body : [];
+        $received = $body['events_received'] ?? null;
+
+        if (! is_numeric($received) || (int) $received < 1) {
+            $this->partialFailure = PartialFailure::fromMeta($body, $status);
+
+            return false;
+        }
+
+        $this->deliveryReceipt = (string) json_encode(array_filter([
+            'events_received' => (int) $received,
+            'fbtrace_id' => is_string($body['fbtrace_id'] ?? null) ? mb_substr($body['fbtrace_id'], 0, 64) : null,
+        ], static fn (mixed $v): bool => $v !== null));
+
+        return true;
     }
 
     /**
