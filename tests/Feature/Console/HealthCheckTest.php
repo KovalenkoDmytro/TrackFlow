@@ -151,6 +151,47 @@ it('flags an active integration with many deliveries and none delivered', functi
     $this->artisan('health:check --no-mail')->assertSuccessful(); // inactive is not dead
 });
 
+function deadRows(PlatformIntegration $integration, array $codes): void
+{
+    // Fresh click sync so only the dead-integration check can fire.
+    DB::table('google_ads_click_syncs')->insertOrIgnore([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->toDateString(), 'checked_at' => now()->subHour(),
+    ]);
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    foreach ($codes as $code) {
+        PlatformDelivery::query()->create([
+            'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+            'platform' => 'google_ads', 'status' => 'partial_failure', 'attempts' => 1, 'response_code' => 200,
+            'response_body' => $code === null ? null : json_encode(['codes' => [$code], 'message' => 'm']),
+        ]);
+    }
+}
+
+it('names the shop, top rejection code and hint in the dead integration alert', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, [...array_fill(0, 8, 'INVALID_CUSTOMER_FOR_CLICK'), 'CLICK_NOT_FOUND', null]);
+
+    $this->artisan('health:check')->assertFailed();
+
+    Mail::assertSent(HealthAlertMail::class, function (HealthAlertMail $m) use ($integration): bool {
+        $text = $m->render();
+
+        return str_contains($m->problems[0], "google_ads integration {$integration->getKey()} ({$integration->user->name}): 10 deliveries in 24h, none delivered. Top reason: INVALID_CUSTOMER_FOR_CLICK (8) — the connected Google Ads account")
+            && str_contains($m->problems[0], 'Other reasons: CLICK_NOT_FOUND (1).')
+            && str_contains($text, 'INVALID_CUSTOMER_FOR_CLICK');
+    });
+});
+
+it('does not alert when every undelivered row is a normal data condition', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    deadRows($integration, [null]); // a row without a known reason means we cannot call it benign
+    $this->artisan('health:check --no-mail')->assertFailed();
+});
+
 it('flags active integrations without active mappings', function (): void {
     healthIntegration(Platform::Meta, withMapping: false);
 

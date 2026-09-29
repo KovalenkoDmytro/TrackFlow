@@ -12,6 +12,7 @@ use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -140,6 +141,47 @@ describe('ProcessTrackingEvent', function (): void {
 
         $googleDelivery = PlatformDelivery::query()->where('platform_integration_id', $google->getKey())->firstOrFail();
         expect($googleDelivery->status)->toBe('delivered')->and($googleDelivery->attempts)->toBe(2);
+    });
+
+    it('persists the Google Ads partial failure reason without leaking the gclid', function (): void {
+        $message = 'The click from the imported event is associated with a different Google Ads account (gclid-secret-12345).';
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'access-token']),
+            'https://googleads.googleapis.com/*' => Http::response([
+                'partialFailureError' => [
+                    'code' => 3,
+                    'message' => 'Errors in request: conversions[0]',
+                    'details' => [[
+                        '@type' => 'type.googleapis.com/google.ads.googleads.v24.errors.GoogleAdsFailure',
+                        'errors' => [[
+                            'errorCode' => ['conversionUploadError' => 'INVALID_CUSTOMER_FOR_CLICK'],
+                            'message' => $message,
+                            'location' => ['fieldPathElements' => [['fieldName' => 'conversions', 'index' => 0]]],
+                        ]],
+                    ]],
+                ],
+            ]),
+        ]);
+
+        $integration = connectFakeIntegration($this->shop, Platform::GoogleAds);
+        $integration->update(['credentials' => json_encode([
+            'customer_id' => '123-456-7890',
+            'developer_token' => 'developer-token',
+            'oauth' => ['client_id' => 'c', 'client_secret' => 's', 'refresh_token' => 'r'],
+        ])]);
+
+        app(ProcessTrackingEvent::class)->handle(fakeTrackingData($this->shop, gclid: 'gclid-secret-12345'));
+
+        $delivery = PlatformDelivery::query()->firstOrFail();
+        $body = json_decode((string) $delivery->response_body, true);
+
+        expect($delivery->status)->toBe('partial_failure')
+            ->and($delivery->response_code)->toBe(200)
+            ->and($body['codes'])->toBe(['INVALID_CUSTOMER_FOR_CLICK'])
+            ->and($body['message'])->toContain('different Google Ads account')
+            ->and((string) $delivery->response_body)->not->toContain('gclid-secret-12345')
+            ->and(strlen((string) $delivery->response_body))->toBeLessThanOrEqual(1024)
+            ->and($integration->fresh()->last_error)->toBe('partial_failure: INVALID_CUSTOMER_FOR_CLICK');
     });
 
     it('does not re-send partial failures on retry', function (): void {

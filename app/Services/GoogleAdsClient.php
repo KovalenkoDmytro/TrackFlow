@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Contracts\ConversionPlatformContract;
+use App\Contracts\ReportsPartialFailure;
+use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
@@ -19,8 +21,10 @@ use Illuminate\Support\Facades\Log;
  * The class is intentionally final — extension happens through the contract,
  * not inheritance.
  */
-final class GoogleAdsClient implements ConversionPlatformContract
+final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartialFailure
 {
+    private ?PartialFailure $partialFailure = null;
+
     /**
      * The nine Shopify e-commerce events TrackFlow tracks, mapped to their
      * Google Ads conversion category. These are provisioned once per integration
@@ -273,6 +277,8 @@ final class GoogleAdsClient implements ConversionPlatformContract
      */
     public function uploadClickConversion(array $credentials, string $conversionActionResourceName, TrackingEventData $data): bool
     {
+        $this->partialFailure = null;
+
         $accessToken = $this->getAccessToken($credentials['oauth']);
         $customerId = str_replace('-', '', $credentials['customer_id']);
 
@@ -304,15 +310,23 @@ final class GoogleAdsClient implements ConversionPlatformContract
         $result = $response->json();
 
         if (! empty($result['partialFailureError'])) {
-            Log::warning('GoogleAdsClient: partial failure on uploadClickConversion', [
-                'partial_failure_error' => $result['partialFailureError'],
-                'conversion_action' => $conversionActionResourceName,
-            ]);
+            // The raw error can echo the gclid, so only the sanitised codes/message are kept;
+            // the caller logs them together with the integration and shop.
+            $this->partialFailure = PartialFailure::fromGoogleAds(
+                is_array($result['partialFailureError']) ? $result['partialFailureError'] : [],
+                $response->status(),
+                array_filter([(string) $data->gclid]),
+            );
 
             return false;
         }
 
         return true;
+    }
+
+    public function partialFailure(): ?PartialFailure
+    {
+        return $this->partialFailure;
     }
 
     /**

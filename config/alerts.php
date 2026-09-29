@@ -28,4 +28,18 @@ return [
 
     // Oldest pending queued job older than this many minutes means the worker is likely down.
     'queue_backlog_max_age_minutes' => (int) env('ALERT_QUEUE_BACKLOG_MAX_AGE_MINUTES', 15),
+
+    // Plain-language hints for delivery rejection codes, shown in the dead-integration alert.
+    // `alert` false marks normal data conditions (old/fresh/duplicate events): they only
+    // alert when EVERY delivery in the window has such a code and is never worth reconnecting for.
+    'delivery_reason_hints' => [
+        'INVALID_CUSTOMER_FOR_CLICK' => ['alert' => true, 'hint' => 'the connected Google Ads account is not the one that owns the ad clicks (wrong account, manager account, or cross-account conversion tracking). Reconnect with the correct account.'],
+        'CLICK_NOT_FOUND' => ['alert' => true, 'hint' => 'Google could not find the click for the gclid; check that the connected account owns the clicks and that gclids are captured intact.'],
+        'INVALID_CONVERSION_ACTION' => ['alert' => true, 'hint' => 'the conversion action no longer exists or is not usable for uploads; re-run conversion action setup or reconnect.'],
+        'TOO_RECENT_CONVERSION_ACTION' => ['alert' => true, 'hint' => 'the conversion action was created very recently; this is temporary and should clear within about 6 hours.'],
+        'EXPIRED_EVENT' => ['alert' => false, 'hint' => 'the click is older than the allowed upload window (normal for late events).'],
+        'TOO_RECENT_EVENT' => ['alert' => false, 'hint' => 'the click is too recent for Google to process (normal, self-resolving).'],
+        'CLICK_CONVERSION_ALREADY_EXISTS' => ['alert' => false, 'hint' => 'this conversion was already uploaded (duplicate).'],
+        'ORDER_ID_ALREADY_IN_USE' => ['alert' => false, 'hint' => 'this order id was already used for an upload (duplicate).'],
+    ],
 ];

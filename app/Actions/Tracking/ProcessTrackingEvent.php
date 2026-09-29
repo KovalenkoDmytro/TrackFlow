@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Actions\Tracking;
 
 use App\Contracts\PlatformResolverContract;
+use App\Contracts\ReportsPartialFailure;
+use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
 use App\Models\ConversionActionMapping;
@@ -164,22 +166,40 @@ final class ProcessTrackingEvent
             $platform = $this->resolver->resolve($integration->platform);
             $success = $platform->uploadConversion($credentials, $data, $mapping);
 
+            $failure = ! $success && $platform instanceof ReportsPartialFailure ? $platform->partialFailure() : null;
+
             $delivery->update([
                 'status' => $success ? 'delivered' : 'partial_failure',
                 'attempts' => $delivery->attempts + 1,
                 'sent_at' => now(),
+                ...($failure instanceof PartialFailure ? [
+                    'response_code' => $failure->httpStatus,
+                    'response_body' => $failure->toJson(),
+                ] : []),
             ]);
 
             $integration->last_success_at = $success ? now() : $integration->last_success_at;
 
             if (! $success) {
-                $integration->last_error = 'partial_failure';
+                $integration->last_error = $failure instanceof PartialFailure ? $failure->lastError() : 'partial_failure';
                 $integration->last_error_at = now();
+
+                Log::warning('ProcessTrackingEvent: partial failure', [
+                    'integration_id' => $integration->getKey(),
+                    'tracking_event_id' => $trackingEvent->getKey(),
+                    'shop' => $data->shopDomain,
+                    'platform' => $integration->platform->value,
+                    'codes' => $failure?->codes,
+                    'message' => $failure?->message,
+                ]);
             }
 
             $integration->save();
 
             Log::info('ProcessTrackingEvent: dispatched', [
+                'integration_id' => $integration->getKey(),
+                'tracking_event_id' => $trackingEvent->getKey(),
+                'shop' => $data->shopDomain,
                 'platform' => $integration->platform->value,
                 'event' => $data->event,
                 'success' => $success,
