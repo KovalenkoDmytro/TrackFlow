@@ -1,4 +1,5 @@
 import { EventDescription } from '../../../components/ui/EventDescription';
+import { OtherGoogleAdsAccountNotice } from '../../../components/ui/OtherGoogleAdsAccountNotice';
 // resources/js/features/settings/google-ads/GoogleAdsForm.tsx
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -120,6 +121,10 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
         <Alert severity="error" sx={{ mb: 3 }}>
           {form.formState.errors.root.message}
         </Alert>
+      )}
+
+      {query.data?.integration?.clicks_from_other_account && (
+        <OtherGoogleAdsAccountNotice customerId={credentials?.customer_id} />
       )}
 
       <GoogleCloudSetupGuide connected={query.data?.integration?.active ?? false} />
