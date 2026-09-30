@@ -116,10 +116,11 @@ final class FindGoogleAdsClickOwner extends Command
 
         $found = [];
         $pending = $wanted;
-        foreach ($accounts as $account) {
+        foreach ($accounts as $index => $account) {
             if ($pending === []) {
                 break;
             }
+            $this->line(sprintf('[%d/%d] %s %s (%d clicks)...', $index + 1, $accounts->count(), $account['id'], $account['name'], $account['clicks']));
             $matches = 0;
             try {
                 $accountCredentials = ['customer_id' => $account['id'], 'mcc_id' => $mcc, 'oauth' => $credentials['oauth']];
@@ -141,6 +142,7 @@ final class FindGoogleAdsClickOwner extends Command
                 continue;
             }
             if ($matches > 0) {
+                $this->info("      -> {$matches} click ID(s) matched");
                 $found[] = [$account['id'], $account['name'], $matches, $account['clicks']];
             }
         }
