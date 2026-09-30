@@ -222,6 +222,20 @@ it('does not email when the clicks demonstrably belong to another Google Ads acc
     expect($problem())->toContain('INVALID_CUSTOMER_FOR_CLICK')->not->toContain('found none of');
 });
 
+it('does not email for foreign clicks when older rows have no recorded reason', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    $integration->update(['credentials' => json_encode(['customer_id' => '123-456-7890'])]);
+    deadRows($integration, [...array_fill(0, 5, 'INVALID_CUSTOMER_FOR_CLICK'), ...array_fill(0, 14, null)]);
+    TrackingEvent::factory()->create(['user_id' => $integration->user_id, 'gclid' => 'abc', 'gclid_hash' => hash('sha256', 'abc')]);
+    collect(range(1, 7))->each(fn (int $d) => DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now()->subHour(),
+    ]));
+
+    $this->artisan('health:check')->assertSuccessful();
+    Mail::assertNothingSent();
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);

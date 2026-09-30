@@ -239,7 +239,9 @@ final class HealthCheck extends Command
      */
     private function onlyDataConditions(array $reasons, int $total, bool $foreignClicks = false): bool
     {
-        if ($reasons === [] || array_sum($reasons) < $total) {
+        // Deliveries from before reasons were persisted carry no code; proven foreign clicks
+        // explain them too, so coverage is only required without that evidence.
+        if ($reasons === [] || (! $foreignClicks && array_sum($reasons) < $total)) {
             return false;
         }
 
