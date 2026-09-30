@@ -8,6 +8,7 @@ use App\Actions\GoogleAds\CreateConversionActions;
 use App\Enums\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\PlatformIntegration;
+use App\Services\GoogleAdsClickOwnership;
 use App\Services\GoogleAdsClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -71,6 +72,8 @@ final class GoogleAdsApiController extends Controller
                 'last_success_at' => $integration->last_success_at,
                 'last_error' => $integration->last_error,
                 'last_error_at' => $integration->last_error_at,
+                'clicks_from_other_account' => $integration->active
+                    && app(GoogleAdsClickOwnership::class)->foreignClicks($integration) !== null,
             ],
             'credentials' => $credentials,
             'mappings' => $integration->conversionActionMappings->map(fn ($m) => [
