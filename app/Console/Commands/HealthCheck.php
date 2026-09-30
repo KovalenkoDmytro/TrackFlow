@@ -9,6 +9,7 @@ use App\Enums\Platform;
 use App\Mail\HealthAlertMail;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
+use App\Models\TrackingEvent;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -176,6 +177,9 @@ final class HealthCheck extends Command
                 $message .= " Top reason: {$code} ({$reasons[$code]})";
                 $hint = config("alerts.delivery_reason_hints.{$code}.hint");
                 $message .= is_string($hint) ? " — {$hint}" : '.';
+                if ($code === 'INVALID_CUSTOMER_FOR_CLICK' && ($evidence = $this->clickOwnershipEvidence((int) $row->platform_integration_id)) !== null) {
+                    $message .= " {$evidence}";
+                }
                 if (count($reasons) > 1) {
                     $message .= ' Other reasons: '.collect($reasons)->except($code)->map(fn (int $n, string $c): string => "{$c} ({$n})")->implode(', ').'.';
                 }
@@ -213,6 +217,36 @@ final class HealthCheck extends Command
             ->sortDesc();
 
         return $codes->all();
+    }
+
+    /**
+     * When the click sync has covered enough days and still matched none of the shop's
+     * captured click IDs, the connected account demonstrably owns no clicks for this
+     * traffic, so say that instead of guessing. Null when the evidence is inconclusive
+     * (sync too young, no click IDs, or at least one match).
+     */
+    private function clickOwnershipEvidence(int $integrationId): ?string
+    {
+        $userId = PlatformIntegration::query()->whereKey($integrationId)->value('user_id');
+        $checkedDays = DB::table('google_ads_click_syncs')->where('platform_integration_id', $integrationId)->count();
+        if ($userId === null || $checkedDays < (int) config('alerts.click_ownership_min_synced_days')) {
+            return null;
+        }
+
+        $events = TrackingEvent::query()->where('user_id', $userId)
+            ->where('occurred_at', '>=', now()->subDays(30))
+            ->whereNotNull('gclid_hash');
+        $tagged = (clone $events)->distinct()->count('gclid_hash');
+        $matched = (clone $events)->whereExists(fn ($query) => $query->selectRaw('1')->from('google_ads_clicks')
+            ->where('platform_integration_id', $integrationId)
+            ->whereColumn('google_ads_clicks.gclid_hash', 'tracking_events.gclid_hash'))->exists();
+
+        if ($tagged === 0 || $matched) {
+            return null;
+        }
+
+        return "Click matching over {$checkedDays} synced days found none of {$tagged} captured click IDs in the connected account: "
+            ."the ads sending this traffic run in a different Google Ads account. Run `php artisan google-ads:find-click-owner {$integrationId} --mcc=<manager id>` to locate it.";
     }
 
     /**
