@@ -183,6 +183,36 @@ it('names the shop, top rejection code and hint in the dead integration alert', 
     });
 });
 
+it('states that no captured click belongs to the connected account once enough days were synced', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, array_fill(0, 10, 'INVALID_CUSTOMER_FOR_CLICK'));
+    TrackingEvent::factory()->create(['user_id' => $integration->user_id, 'gclid' => 'abc', 'gclid_hash' => hash('sha256', 'abc')]);
+    $problem = fn () => collect(Mail::sent(HealthAlertMail::class))->last()?->problems[0];
+
+    // Too few synced days: the evidence is inconclusive, so stay silent about ownership.
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->not->toContain('found none of');
+
+    Cache::flush();
+    collect(range(1, 7))->each(fn (int $d) => DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now()->subHour(),
+    ]));
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->toContain('found none of 1 captured click IDs')
+        ->and($problem())->toContain("google-ads:find-click-owner {$integration->getKey()}");
+
+    // A single matching click means the account does own some traffic: no claim.
+    Cache::flush();
+    DB::table('google_ads_clicks')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'gclid_hash' => hash('sha256', 'abc'), 'click_date' => now()->toDateString(),
+        'day_start_utc' => now()->startOfDay(), 'checked_at' => now(),
+    ]);
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->not->toContain('found none of');
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);
