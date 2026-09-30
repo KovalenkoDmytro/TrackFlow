@@ -29,11 +29,19 @@ function fakeMcc(): void
         'https://googleads.googleapis.com/*' => function ($request) {
             $query = $request['query'];
             if (str_contains($query, 'customer_client')) {
+                expect($query)->not->toContain('metrics');
+
                 return Http::response(['results' => [
-                    ['customerClient' => ['id' => '1111111111', 'descriptiveName' => 'Other'], 'metrics' => ['clicks' => '5']],
-                    ['customerClient' => ['id' => '2222222222', 'descriptiveName' => 'Safe Care Real'], 'metrics' => ['clicks' => '90']],
-                    ['customerClient' => ['id' => '3333333333', 'descriptiveName' => 'Idle'], 'metrics' => ['clicks' => '0']],
+                    ['customerClient' => ['id' => '1111111111', 'descriptiveName' => 'Other']],
+                    ['customerClient' => ['id' => '2222222222', 'descriptiveName' => 'Safe Care Real']],
+                    ['customerClient' => ['id' => '3333333333', 'descriptiveName' => 'Idle']],
                 ]]);
+            }
+            if (str_contains($query, 'metrics.clicks')) {
+                $clicks = ['1111111111' => '5', '2222222222' => '90', '3333333333' => '0'];
+                preg_match('#/customers/(\d+)/#', $request->url(), $m);
+
+                return Http::response(['results' => [['metrics' => ['clicks' => $clicks[$m[1]] ?? '0']]]]);
             }
             $owner = str_contains($request->url(), '/customers/2222222222/');
             $sent = $request->header('login-customer-id')[0] ?? null;
@@ -57,7 +65,9 @@ it('finds the account under the manager that owns the captured click ids', funct
         ->expectsOutputToContain('1 of 2 click IDs located')
         ->assertSuccessful();
 
-    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/customers/3333333333/'));
+    // The idle account is only asked for its click total, never for click_view.
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/customers/3333333333/')
+        && str_contains($request['query'], 'click_view'));
 });
 
 it('says so when no account under the manager owns the clicks', function (): void {

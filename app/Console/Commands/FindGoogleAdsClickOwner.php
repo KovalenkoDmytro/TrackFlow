@@ -76,26 +76,43 @@ final class FindGoogleAdsClickOwner extends Command
             $to = CarbonImmutable::now('UTC')->toDateString();
             $managerCredentials = ['customer_id' => $mcc, 'mcc_id' => $mcc, 'oauth' => $credentials['oauth']];
 
+            // customer_client cannot be combined with metrics, so list the hierarchy first
+            // and read each account's clicks from its own customer resource below.
             $rows = $client->report($managerCredentials, $token,
-                'SELECT customer_client.id, customer_client.descriptive_name, metrics.clicks FROM customer_client '
-                ."WHERE customer_client.manager = FALSE AND segments.date BETWEEN '{$from}' AND '{$to}'");
+                'SELECT customer_client.id, customer_client.descriptive_name FROM customer_client '
+                ."WHERE customer_client.manager = FALSE AND customer_client.status = 'ENABLED'");
         } catch (\Throwable $e) {
             Log::error('google-ads:find-click-owner failed', ['integration' => $integration->getKey(), 'message' => $e->getMessage()]);
-            $this->error('Could not list accounts under the manager. Check that the connected Google user has access to it.');
+            $this->error('Could not list accounts under the manager. See the log entry "google-ads:find-click-owner failed" for the reason.');
 
             return self::FAILURE;
         }
 
-        $accounts = collect($rows)
+        $listed = collect($rows)
             ->map(fn (array $row): array => [
                 'id' => (string) ($row['customerClient']['id'] ?? ''),
                 'name' => (string) ($row['customerClient']['descriptiveName'] ?? ''),
-                'clicks' => (int) ($row['metrics']['clicks'] ?? 0),
             ])
-            ->filter(fn (array $a): bool => preg_match('/^\d{10}$/', $a['id']) === 1 && $a['clicks'] > 0)
+            ->filter(fn (array $a): bool => preg_match('/^\d{10}$/', $a['id']) === 1)
+            ->unique('id')->values();
+        $this->info("{$listed->count()} account(s) under the manager; finding those with clicks in the last {$days} days.");
+
+        $accounts = $listed->map(function (array $account) use ($client, $token, $mcc, $credentials, $from, $to): ?array {
+            try {
+                $clicks = $client->report(['customer_id' => $account['id'], 'mcc_id' => $mcc, 'oauth' => $credentials['oauth']], $token,
+                    "SELECT metrics.clicks FROM customer WHERE segments.date BETWEEN '{$from}' AND '{$to}'");
+            } catch (\Throwable $e) {
+                Log::warning('google-ads:find-click-owner account skipped', ['account' => $account['id'], 'message' => $e->getMessage()]);
+
+                return null;
+            }
+
+            return $account + ['clicks' => (int) array_sum(array_map(fn (array $r): int => (int) ($r['metrics']['clicks'] ?? 0), $clicks))];
+        })
+            ->filter(fn (?array $a): bool => $a !== null && $a['clicks'] > 0)
             ->sortByDesc('clicks')->take($maxAccounts)->values();
 
-        $this->info("{$accounts->count()} account(s) with clicks in the last {$days} days; checking their click reports.");
+        $this->info("{$accounts->count()} account(s) with clicks; checking their click reports.");
 
         $found = [];
         $pending = $wanted;
