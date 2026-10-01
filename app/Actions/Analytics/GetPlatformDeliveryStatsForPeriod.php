@@ -23,6 +23,8 @@ use Lorisleiva\Actions\Concerns\AsObject;
  *   - delivered                    → delivered
  *   - failed, partial_failure      → failed (merged into a single count)
  *   - queued                       → pending
+ *   - other_account                → other_account (Google Ads click owned by an unconnected
+ *                                    account; not a failure and never part of last_error)
  *
  * @phpstan-type PlatformDeliveryStat array{
  *     event: string,
@@ -31,6 +33,7 @@ use Lorisleiva\Actions\Concerns\AsObject;
  *     delivered: int,
  *     failed: int,
  *     pending: int,
+ *     other_account: int,
  *     last_error: string|null,
  * }
  */
@@ -46,7 +49,7 @@ final class GetPlatformDeliveryStatsForPeriod
      */
     public function handle(User $shop, CarbonImmutable $start, CarbonImmutable $end, string $platform): array
     {
-        /** @var array<string, array{attempted: int, delivered: int, failed: int, pending: int}> $rawStats */
+        /** @var array<string, array{attempted: int, delivered: int, failed: int, pending: int, other_account: int}> $rawStats */
         $rawStats = PlatformDelivery::query()
             ->join('tracking_events', 'tracking_events.id', '=', 'platform_deliveries.tracking_event_id')
             ->where('tracking_events.user_id', '=', $shop->getKey())
@@ -57,6 +60,7 @@ final class GetPlatformDeliveryStatsForPeriod
             ->selectRaw("SUM(CASE WHEN platform_deliveries.status = 'delivered' THEN 1 ELSE 0 END) as delivered")
             ->selectRaw("SUM(CASE WHEN platform_deliveries.status IN ('failed', 'partial_failure') THEN 1 ELSE 0 END) as failed")
             ->selectRaw("SUM(CASE WHEN platform_deliveries.status = 'queued' THEN 1 ELSE 0 END) as pending")
+            ->selectRaw("SUM(CASE WHEN platform_deliveries.status = 'other_account' THEN 1 ELSE 0 END) as other_account")
             ->groupBy('tracking_events.event')
             ->get()
             ->keyBy('event')
@@ -65,6 +69,7 @@ final class GetPlatformDeliveryStatsForPeriod
                 'delivered' => (int) $row->delivered,
                 'failed' => (int) $row->failed,
                 'pending' => (int) $row->pending,
+                'other_account' => (int) $row->other_account,
             ])
             ->all();
 
@@ -79,6 +84,7 @@ final class GetPlatformDeliveryStatsForPeriod
                 'delivered' => 0,
                 'failed' => 0,
                 'pending' => 0,
+                'other_account' => 0,
             ];
 
             $result[] = [
@@ -88,11 +94,34 @@ final class GetPlatformDeliveryStatsForPeriod
                 'delivered' => $stats['delivered'],
                 'failed' => $stats['failed'],
                 'pending' => $stats['pending'],
+                'other_account' => $stats['other_account'],
                 'last_error' => $lastErrors[$type->value] ?? null,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Overall attempted vs other_account delivery counts for the period (all event types).
+     *
+     * @return array{attempted: int, other_account: int}
+     */
+    public function otherAccountShare(User $shop, CarbonImmutable $start, CarbonImmutable $end, string $platform): array
+    {
+        $row = PlatformDelivery::query()
+            ->join('tracking_events', 'tracking_events.id', '=', 'platform_deliveries.tracking_event_id')
+            ->where('tracking_events.user_id', '=', $shop->getKey())
+            ->where('platform_deliveries.platform', '=', $platform)
+            ->whereBetween('tracking_events.occurred_at', [$start, $end])
+            ->selectRaw('COUNT(*) as attempted')
+            ->selectRaw("SUM(CASE WHEN platform_deliveries.status = 'other_account' THEN 1 ELSE 0 END) as other_account")
+            ->first();
+
+        return [
+            'attempted' => (int) $row?->getAttribute('attempted'),
+            'other_account' => (int) $row?->getAttribute('other_account'),
+        ];
     }
 
     /**

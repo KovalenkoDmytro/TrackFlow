@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\Platform;
 use App\Enums\TrackingEventType;
+use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
@@ -62,41 +63,36 @@ it('treats every event as unverified for a freshly connected account with no syn
     $this->travelBack();
 });
 
-it('flags clicks from another account only once the current account was synced long enough without a match', function (): void {
+it('reports the other-account share of Google Ads deliveries instead of an all-or-nothing flag', function (): void {
     $shop = User::factory()->create();
     $integration = PlatformIntegration::create([
         'user_id' => $shop->id, 'platform' => Platform::GoogleAds, 'active' => true,
         'credentials' => json_encode(['customer_id' => '123-456-7890']),
     ]);
-    TrackingEvent::factory()->forUser($shop)->create(['gclid' => 'abc', 'gclid_hash' => hash('sha256', 'abc')]);
-    $syncDays = fn (string $customer, int $days) => collect(range(1, $days))->each(fn (int $d) => DB::table('google_ads_click_syncs')->insert([
-        'platform_integration_id' => $integration->id, 'customer_id' => $customer,
-        'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now(),
-    ]));
-    $flag = fn () => $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?platform=google_ads')
-        ->assertOk()->json('summary.attribution.clicks_from_other_account');
-    $settings = fn () => $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/google-ads')
-        ->assertOk()->json('integration.clicks_from_other_account');
+    $deliver = function (string $status, string $key) use ($shop, $integration): void {
+        $event = TrackingEvent::factory()->forUser($shop)->create(['gclid' => $key, 'gclid_hash' => hash('sha256', $key)]);
+        PlatformDelivery::query()->create([
+            'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+            'platform' => 'google_ads', 'status' => $status, 'attempts' => 1,
+            'response_body' => $status === 'other_account' ? json_encode(['codes' => ['INVALID_CUSTOMER_FOR_CLICK'], 'customer_id' => '1234567890']) : null,
+        ]);
+    };
+    $analytics = fn () => $this->withToken($this->shopifySessionToken($shop))->getJson('/api/analytics?platform=google_ads')->assertOk();
+    $settings = fn () => $this->withToken($this->shopifySessionToken($shop))->getJson('/api/settings/google-ads')->assertOk();
 
-    // Syncs recorded for a previously connected customer id are not evidence about this one.
-    $syncDays('9999999999', 30);
-    expect($flag())->toBeFalse()->and($settings())->toBeFalse();
+    $analytics()->assertJsonPath('summary.totals.other_account', 0)->assertJsonMissingPath('summary.attribution.clicks_from_other_account');
+    $settings()->assertJsonPath('integration.other_account_share', ['attempted' => 0, 'other_account' => 0]);
 
-    $syncDays('1234567890', 6);
-    expect($flag())->toBeFalse(); // not enough days yet
+    $deliver('delivered', 'a');
+    $deliver('other_account', 'b');
+    $deliver('other_account', 'c');
+    $deliver('partial_failure', 'd');
 
-    DB::table('google_ads_click_syncs')->insert([
-        'platform_integration_id' => $integration->id, 'customer_id' => '1234567890',
-        'click_date' => now()->subDays(7)->toDateString(), 'checked_at' => now(),
-    ]);
-    expect($flag())->toBeTrue()->and($settings())->toBeTrue();
-
-    DB::table('google_ads_clicks')->insert([
-        'platform_integration_id' => $integration->id, 'customer_id' => '1234567890',
-        'gclid_hash' => hash('sha256', 'abc'), 'click_date' => now()->toDateString(),
-        'day_start_utc' => now()->startOfDay(), 'checked_at' => now(),
-    ]);
-    expect($flag())->toBeFalse()->and($settings())->toBeFalse();
+    $analytics()->assertJsonPath('summary.totals.attempted', 4)
+        ->assertJsonPath('summary.totals.other_account', 2)
+        ->assertJsonPath('summary.totals.failed', 1)
+        ->assertJsonPath('summary.attribution.customer_id', '1234567890');
+    $settings()->assertJsonPath('integration.other_account_share', ['attempted' => 4, 'other_account' => 2]);
 });
 
 it('syncs paginated click reports in account timezone and hashes historical events', function (): void {

@@ -22,9 +22,14 @@ interface PlatformDeliveryTableProps {
   loading: boolean;
   platformLabel?: string;
   integration?: PlatformIntegrationState;
+  /** Google Ads only: show the "Other account" column. */
+  showOtherAccount?: boolean;
 }
 
-export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 'Meta', integration }: PlatformDeliveryTableProps) {
+const OTHER_ACCOUNT_TOOLTIP =
+  'The ad click came from a Google Ads account that is not connected. Google only accepts the conversion in the account that owns the click.';
+
+export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 'Meta', integration, showOtherAccount = false }: PlatformDeliveryTableProps) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -58,6 +63,13 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
             <TableCell align="right">Delivered</TableCell>
             <TableCell align="right">Failed</TableCell>
             <TableCell align="right">Pending</TableCell>
+            {showOtherAccount && (
+              <TableCell align="right">
+                <Tooltip title={OTHER_ACCOUNT_TOOLTIP}>
+                  <span>Other account</span>
+                </Tooltip>
+              </TableCell>
+            )}
             <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Last error</TableCell>
           </TableRow>
         </TableHead>
@@ -106,6 +118,17 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
                   {row.pending.toLocaleString()}
                 </Typography>
               </TableCell>
+              {showOtherAccount && (
+                <TableCell align="right">
+                  <Typography
+                    variant="body2"
+                    sx={{ fontVariantNumeric: 'tabular-nums' }}
+                    color={row.other_account === 0 ? 'text.disabled' : 'text.primary'}
+                  >
+                    {row.other_account.toLocaleString()}
+                  </Typography>
+                </TableCell>
+              )}
               <TableCell sx={{ maxWidth: 200, display: { xs: 'none', sm: 'table-cell' } }}>
                 {row.last_error ? (
                   <Tooltip title={row.last_error}>
@@ -151,6 +174,13 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
                 {totals.pending.toLocaleString()}
               </Typography>
             </TableCell>
+            {showOtherAccount && (
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {totals.other_account.toLocaleString()}
+                </Typography>
+              </TableCell>
+            )}
             <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }} />
           </TableRow>
         </TableFooter>

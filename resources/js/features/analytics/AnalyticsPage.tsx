@@ -49,13 +49,14 @@ export function AnalyticsPage() {
   const isMeta = platform === 'meta';
 
   const eventCountsData = !isMeta ? (data as AnalyticsResponse | undefined) : undefined;
-  const deliveryData = isMeta ? (data as PlatformDeliveryResponse | undefined) : undefined;
+  const isGoogleAds = platform === 'google_ads';
+  const deliveryData = isMeta || isGoogleAds ? (data as PlatformDeliveryResponse | undefined) : undefined;
 
   const counts = eventCountsData?.summary?.counts ?? [];
   const total = eventCountsData?.summary?.total ?? 0;
   const period = data?.summary?.period ?? null;
   const deliveryStats = deliveryData?.summary?.delivery_stats ?? [];
-  const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0 };
+  const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0, other_account: 0 };
   const retentionDays = data?.meta?.retention_days ?? DEFAULT_RETENTION_DAYS;
 
   const title = platform === 'google_ads' ? 'Google Ads click-matched events' : platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
@@ -101,8 +102,21 @@ export function AnalyticsPage() {
       </Card>
 
       <Card variant="outlined" sx={{ overflow: 'hidden' }}>
-        {platform === 'google_ads' ? (
-          <GoogleAdsAttributionTable summary={eventCountsData?.summary} loading={isFetching} />
+        {isGoogleAds ? (
+          <>
+            <GoogleAdsAttributionTable summary={eventCountsData?.summary} loading={isFetching} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, px: 2, pt: 3 }}>
+              Conversion uploads to Google Ads
+            </Typography>
+            <PlatformDeliveryTable
+              stats={deliveryStats}
+              totals={deliveryTotals}
+              loading={isFetching}
+              platformLabel="Google Ads"
+              integration={deliveryData?.summary?.integration}
+              showOtherAccount
+            />
+          </>
         ) : isMeta ? (
           <PlatformDeliveryTable
             stats={deliveryStats}

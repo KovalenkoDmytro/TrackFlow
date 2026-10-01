@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Analytics\GetPlatformDeliveryStatsForPeriod;
 use App\Actions\GoogleAds\CreateConversionActions;
 use App\Enums\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\PlatformIntegration;
-use App\Services\GoogleAdsClickOwnership;
 use App\Services\GoogleAdsClient;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -72,8 +73,15 @@ final class GoogleAdsApiController extends Controller
                 'last_success_at' => $integration->last_success_at,
                 'last_error' => $integration->last_error,
                 'last_error_at' => $integration->last_error_at,
-                'clicks_from_other_account' => $integration->active
-                    && app(GoogleAdsClickOwnership::class)->foreignClicks($integration) !== null,
+                // Share of Google Ads deliveries (last 30 days) whose click belongs to an unconnected account.
+                'other_account_share' => $integration->active
+                    ? app(GetPlatformDeliveryStatsForPeriod::class)->otherAccountShare(
+                        $shop,
+                        CarbonImmutable::now()->subDays(30)->startOfDay(),
+                        CarbonImmutable::now()->endOfDay(),
+                        Platform::GoogleAds->value,
+                    )
+                    : ['attempted' => 0, 'other_account' => 0],
             ],
             'credentials' => $credentials,
             'mappings' => $integration->conversionActionMappings->map(fn ($m) => [
