@@ -204,3 +204,23 @@ describe('gclid trimming', function (): void {
         expect(PlatformDelivery::query()->count())->toBe(0);
     });
 });
+
+describe('value range validation', function (): void {
+    beforeEach(function (): void {
+        $this->shop = User::factory()->create(['tracking_secret' => 'shop-tracking-secret']);
+    });
+
+    it('accepts a large presentment-currency value such as 195848000 LBP', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['value' => 195848000, 'currency' => 'LBP']))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+    });
+
+    it('rejects a value above the supported maximum with a 422 on value', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['value' => 1e15]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['value']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+});

@@ -69,7 +69,7 @@ final class TrackEventRequest extends FormRequest
             'shop_domain' => ['required', 'string'],
             'tracking_secret' => ['required', 'string'],
             'event' => ['required', 'string'],
-            'value' => ['sometimes', 'numeric', 'min:0'],
+            'value' => ['sometimes', 'numeric', 'min:0', 'max:999999999999999'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'transaction_id' => ['sometimes', 'nullable', 'string'],
             'gclid' => ['sometimes', 'nullable', 'string'],
