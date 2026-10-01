@@ -9,6 +9,7 @@ use App\Enums\Platform;
 use App\Mail\HealthAlertMail;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
+use App\Services\GoogleAdsClickOwnership;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -163,11 +164,21 @@ final class HealthCheck extends Command
             }
 
             $reasons = $this->deliveryReasons((int) $row->platform_integration_id);
-            if ($this->onlyDataConditions($reasons, $total)) {
+            $integration = PlatformIntegration::query()->with('user:id,name')->find($row->platform_integration_id);
+            $foreign = $integration !== null && array_key_exists('INVALID_CUSTOMER_FOR_CLICK', $reasons)
+                ? app(GoogleAdsClickOwnership::class)->foreignClicks($integration) : null;
+
+            // Traffic from another Google Ads account is a setup matter the merchant sees in
+            // the app; emailing it every few hours only adds noise, so it is logged instead.
+            if ($this->onlyDataConditions($reasons, $total, foreignClicks: $foreign !== null)) {
+                if ($foreign !== null) {
+                    Log::info('health:check: Google Ads clicks belong to another account, not alerting', ['integration' => $integration?->getKey()] + $foreign);
+                }
+
                 continue;
             }
 
-            $shop = PlatformIntegration::query()->with('user:id,name')->find($row->platform_integration_id)?->user?->name;
+            $shop = $integration?->user?->name;
             $where = $shop === null ? '' : " ({$shop})";
             $message = "{$row->platform} integration {$row->platform_integration_id}{$where}: {$total} deliveries in 24h, none delivered.";
 
@@ -176,6 +187,9 @@ final class HealthCheck extends Command
                 $message .= " Top reason: {$code} ({$reasons[$code]})";
                 $hint = config("alerts.delivery_reason_hints.{$code}.hint");
                 $message .= is_string($hint) ? " — {$hint}" : '.';
+                if ($foreign !== null) {
+                    $message .= " Click matching over {$foreign['checked_days']} synced days found none of {$foreign['click_ids']} captured click IDs in the connected account: the ads sending this traffic run in a different Google Ads account.";
+                }
                 if (count($reasons) > 1) {
                     $message .= ' Other reasons: '.collect($reasons)->except($code)->map(fn (int $n, string $c): string => "{$c} ({$n})")->implode(', ').'.';
                 }
@@ -217,17 +231,24 @@ final class HealthCheck extends Command
 
     /**
      * True when every row carries a code and all codes are normal data conditions
-     * (expired/too-recent/duplicate events) that reconnecting cannot fix.
+     * (expired/too-recent/duplicate events) that reconnecting cannot fix. With
+     * $foreignClicks, INVALID_CUSTOMER_FOR_CLICK also counts: the clicks demonstrably
+     * belong to another account, which the app tells the merchant about.
      *
      * @param  array<string, int>  $reasons
      */
-    private function onlyDataConditions(array $reasons, int $total): bool
+    private function onlyDataConditions(array $reasons, int $total, bool $foreignClicks = false): bool
     {
-        if ($reasons === [] || array_sum($reasons) < $total) {
+        // Deliveries from before reasons were persisted carry no code; proven foreign clicks
+        // explain them too, so coverage is only required without that evidence.
+        if ($reasons === [] || (! $foreignClicks && array_sum($reasons) < $total)) {
             return false;
         }
 
         foreach (array_keys($reasons) as $code) {
+            if ($foreignClicks && $code === 'INVALID_CUSTOMER_FOR_CLICK') {
+                continue;
+            }
             if (config("alerts.delivery_reason_hints.{$code}.alert", true) !== false) {
                 return false;
             }
