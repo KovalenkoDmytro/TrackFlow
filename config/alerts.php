@@ -22,6 +22,9 @@ return [
     // Active integration with at least this many delivery rows in 24h and none delivered.
     'dead_integration_min_deliveries' => (int) env('ALERT_DEAD_INTEGRATION_MIN_DELIVERIES', 10),
 
+    // Synced click-report days needed before "no click IDs match this account" is stated as fact.
+    'click_ownership_min_synced_days' => (int) env('ALERT_CLICK_OWNERSHIP_MIN_SYNCED_DAYS', 7),
+
     // Delivery failures (retries exhausted; partial_failure excluded) per integration within the last hour.
     'delivery_failure_min_count' => (int) env('ALERT_DELIVERY_FAILURE_MIN_COUNT', 5),
     'delivery_failure_min_percent' => (int) env('ALERT_DELIVERY_FAILURE_MIN_PERCENT', 50),

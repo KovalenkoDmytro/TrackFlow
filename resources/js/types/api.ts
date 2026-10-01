@@ -39,7 +39,7 @@ export interface AnalyticsPeriod {
 
 export interface AnalyticsSummary {
   unverified_total?: number;
-  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number };
+  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number; clicks_from_other_account?: boolean };
   counts: EventCount[];
   total: number;
   period: AnalyticsPeriod | null;
@@ -109,6 +109,7 @@ export interface GoogleAdsCredentials {
 
 export interface GoogleAdsIntegration {
   active: boolean;
+  clicks_from_other_account?: boolean;
 }
 
 export interface GoogleAdsMapping {

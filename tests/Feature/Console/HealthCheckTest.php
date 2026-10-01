@@ -183,6 +183,59 @@ it('names the shop, top rejection code and hint in the dead integration alert', 
     });
 });
 
+it('does not email when the clicks demonstrably belong to another Google Ads account', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    $integration->update(['credentials' => json_encode(['customer_id' => '123-456-7890'])]);
+    deadRows($integration, array_fill(0, 10, 'INVALID_CUSTOMER_FOR_CLICK'));
+    TrackingEvent::factory()->create(['user_id' => $integration->user_id, 'gclid' => 'abc', 'gclid_hash' => hash('sha256', 'abc')]);
+    $problem = fn () => collect(Mail::sent(HealthAlertMail::class))->last()?->problems[0];
+
+    // One synced day is not enough evidence, so the normal alert still fires.
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->toContain('INVALID_CUSTOMER_FOR_CLICK')->not->toContain('found none of');
+
+    // Enough synced days of this account and no match: the app informs the merchant, no email.
+    Cache::flush();
+    Mail::fake();
+    collect(range(1, 7))->each(fn (int $d) => DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now()->subHour(),
+    ]));
+    $this->artisan('health:check')->assertSuccessful();
+    Mail::assertNothingSent();
+
+    // Another real problem on the same integration still alerts and carries the evidence.
+    deadRows($integration, ['INVALID_CONVERSION_ACTION']);
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->toContain('found none of 1 captured click IDs')->toContain('INVALID_CONVERSION_ACTION');
+
+    // A single matching click means the account does own some of the traffic: normal alert again.
+    Cache::flush();
+    Mail::fake();
+    PlatformDelivery::query()->where('response_body', 'like', '%INVALID_CONVERSION_ACTION%')->delete();
+    DB::table('google_ads_clicks')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'gclid_hash' => hash('sha256', 'abc'), 'click_date' => now()->toDateString(),
+        'day_start_utc' => now()->startOfDay(), 'checked_at' => now(),
+    ]);
+    $this->artisan('health:check')->assertFailed();
+    expect($problem())->toContain('INVALID_CUSTOMER_FOR_CLICK')->not->toContain('found none of');
+});
+
+it('does not email for foreign clicks when older rows have no recorded reason', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    $integration->update(['credentials' => json_encode(['customer_id' => '123-456-7890'])]);
+    deadRows($integration, [...array_fill(0, 5, 'INVALID_CUSTOMER_FOR_CLICK'), ...array_fill(0, 14, null)]);
+    TrackingEvent::factory()->create(['user_id' => $integration->user_id, 'gclid' => 'abc', 'gclid_hash' => hash('sha256', 'abc')]);
+    collect(range(1, 7))->each(fn (int $d) => DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now()->subHour(),
+    ]));
+
+    $this->artisan('health:check')->assertSuccessful();
+    Mail::assertNothingSent();
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);
