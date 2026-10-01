@@ -123,9 +123,11 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
         </Alert>
       )}
 
-      {query.data?.integration?.clicks_from_other_account && (
-        <OtherGoogleAdsAccountNotice customerId={credentials?.customer_id} />
-      )}
+      <OtherGoogleAdsAccountNotice
+        otherAccount={query.data?.integration?.other_account_share?.other_account ?? 0}
+        attempted={query.data?.integration?.other_account_share?.attempted ?? 0}
+        customerId={credentials?.customer_id}
+      />
 
       <GoogleCloudSetupGuide connected={query.data?.integration?.active ?? false} />
 

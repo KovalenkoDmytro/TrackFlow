@@ -39,7 +39,11 @@ export interface AnalyticsPeriod {
 
 export interface AnalyticsSummary {
   unverified_total?: number;
-  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number; clicks_from_other_account?: boolean };
+  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number };
+  /** Present for the Google Ads platform: per-event delivery outcomes. */
+  delivery_stats?: PlatformDeliveryStat[];
+  totals?: PlatformDeliveryTotals;
+  integration?: PlatformIntegrationState;
   counts: EventCount[];
   total: number;
   period: AnalyticsPeriod | null;
@@ -65,6 +69,8 @@ export interface PlatformDeliveryStat {
   delivered: number;
   failed: number;
   pending: number;
+  /** Google Ads only: click belongs to a Google Ads account that is not connected (not a failure). */
+  other_account: number;
   last_error: string | null;
 }
 
@@ -73,6 +79,7 @@ export interface PlatformDeliveryTotals {
   delivered: number;
   failed: number;
   pending: number;
+  other_account: number;
 }
 
 export interface PlatformIntegrationState {
@@ -109,7 +116,7 @@ export interface GoogleAdsCredentials {
 
 export interface GoogleAdsIntegration {
   active: boolean;
-  clicks_from_other_account?: boolean;
+  other_account_share?: { attempted: number; other_account: number };
 }
 
 export interface GoogleAdsMapping {

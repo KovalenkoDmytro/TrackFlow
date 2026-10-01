@@ -9,7 +9,7 @@ export function GoogleAdsAttributionTable({ summary, loading }: { summary?: Anal
   const attribution = summary.attribution;
   return <>
     <Box sx={{ p: 2 }}>
-      {attribution?.clicks_from_other_account && <OtherGoogleAdsAccountNotice customerId={attribution.customer_id} />}
+      <OtherGoogleAdsAccountNotice otherAccount={summary.totals?.other_account ?? 0} attempted={summary.totals?.attempted ?? 0} customerId={attribution?.customer_id} />
       <Alert severity="info">
         Matched events have a click ID found in the connected Google Ads account's click report.
         Unverified events have a click ID, but no match has been established. They are excluded from the matched total.

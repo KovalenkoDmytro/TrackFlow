@@ -9,7 +9,6 @@ use App\Enums\TrackingEventType;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
-use App\Services\GoogleAdsClickOwnership;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -50,8 +49,6 @@ final class GetGoogleAdsAttribution
                 'customer_id' => $customerId ?: null,
                 'last_checked_at' => (clone $sync)->max('checked_at'),
                 'checked_days' => (clone $sync)->count(),
-                'clicks_from_other_account' => $integration !== null
-                    && app(GoogleAdsClickOwnership::class)->foreignClicks($integration) !== null,
             ],
         ];
     }

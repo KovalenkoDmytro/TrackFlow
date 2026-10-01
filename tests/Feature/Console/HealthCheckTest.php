@@ -236,6 +236,26 @@ it('does not email for foreign clicks when older rows have no recorded reason', 
     Mail::assertNothingSent();
 });
 
+it('ignores other_account rows in the dead integration check and in its reasons', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, array_fill(0, 10, 'INVALID_CUSTOMER_FOR_CLICK'));
+    PlatformDelivery::query()->update(['status' => 'other_account']);
+
+    // Every row belongs to another account: nothing to alert about, even without click-sync evidence.
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // Remaining rows below the minimum do not alert either...
+    deadRows($integration, array_fill(0, 9, 'INVALID_CONVERSION_ACTION'));
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // ...but once the non-other_account rows reach the minimum with 0 delivered, it alerts and the reasons exclude other_account.
+    deadRows($integration, ['INVALID_CONVERSION_ACTION']);
+    $this->artisan('health:check')->assertFailed();
+    Mail::assertSent(HealthAlertMail::class, fn (HealthAlertMail $m) => str_contains($m->problems[0], '10 deliveries in 24h, none delivered')
+        && str_contains($m->problems[0], 'Top reason: INVALID_CONVERSION_ACTION (10)')
+        && ! str_contains($m->problems[0], 'Other reasons'));
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);

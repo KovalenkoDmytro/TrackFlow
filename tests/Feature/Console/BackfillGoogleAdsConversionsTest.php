@@ -9,6 +9,7 @@ use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -158,4 +159,77 @@ it('records a failed delivery and does not crash when the upload throws', functi
     expect($delivery)->not->toBeNull()
         ->and($delivery->status)->toBe('failed')
         ->and($delivery->response_body)->toContain('Invalid customer ID.');
+});
+
+function backfillFakeCustomerMismatch(): void
+{
+    Http::fake([
+        'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'access-token']),
+        'https://googleads.googleapis.com/*' => Http::response(['partialFailureError' => [
+            'code' => 3,
+            'message' => 'Errors in request: conversions[0]',
+            'details' => [['errors' => [[
+                'errorCode' => ['conversionUploadError' => 'INVALID_CUSTOMER_FOR_CLICK'],
+                'message' => 'The click belongs to a different account.',
+            ]]]],
+        ]]),
+    ]);
+}
+
+function backfillMappedIntegration(User $shop): PlatformIntegration
+{
+    $integration = createGoogleAdsIntegration($shop);
+    ConversionActionMapping::query()->create([
+        'platform_integration_id' => $integration->getKey(),
+        'event' => TrackingEventType::Purchase->value,
+        'external_action_id' => 'customers/1234567890/conversionActions/1',
+        'active' => true,
+    ]);
+
+    return $integration;
+}
+
+it('stores the partial failure reason and keeps partial_failure when the sync cannot prove ownership', function (): void {
+    backfillFakeCustomerMismatch();
+    $shop = User::factory()->create();
+    $integration = backfillMappedIntegration($shop);
+    $event = TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)->state(['gclid' => 'gclid-1'])->create();
+
+    $this->artisan('google-ads:backfill', ['integration' => $integration->getKey()])
+        ->expectsOutputToContain('other_account')
+        ->assertSuccessful();
+
+    $delivery = PlatformDelivery::query()->where('tracking_event_id', $event->getKey())->firstOrFail();
+
+    expect($delivery->status)->toBe('partial_failure')
+        ->and($delivery->response_code)->toBe(200)
+        ->and(json_decode((string) $delivery->response_body, true)['codes'])->toBe(['INVALID_CUSTOMER_FOR_CLICK']);
+});
+
+it('classifies other_account like the live path and skips known gclids without calling the API', function (): void {
+    backfillFakeCustomerMismatch();
+    $shop = User::factory()->create();
+    $integration = backfillMappedIntegration($shop);
+    foreach (range(1, 7) as $d) {
+        DB::table('google_ads_click_syncs')->insert([
+            'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+            'click_date' => now()->subDays($d)->toDateString(), 'checked_at' => now(),
+        ]);
+    }
+    $first = TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)
+        ->state(['gclid' => 'gclid-1', 'occurred_at' => now()->subMinutes(2)])->create();
+    $second = TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)
+        ->state(['gclid' => 'gclid-1', 'occurred_at' => now()->subMinute()])->create();
+
+    $this->artisan('google-ads:backfill', ['integration' => $integration->getKey()])->assertSuccessful();
+
+    $a = PlatformDelivery::query()->where('tracking_event_id', $first->getKey())->firstOrFail();
+    $b = PlatformDelivery::query()->where('tracking_event_id', $second->getKey())->firstOrFail();
+
+    expect($a->status)->toBe('other_account')
+        ->and(json_decode((string) $a->response_body, true))->toMatchArray(['codes' => ['INVALID_CUSTOMER_FOR_CLICK'], 'customer_id' => '1234567890'])
+        ->and($b->status)->toBe('other_account')
+        ->and(json_decode((string) $b->response_body, true)['skipped'])->toBeTrue()
+        ->and($integration->fresh()->last_error)->toBeNull();
+    Http::assertSentCount(2); // one token request + one upload: the second event was never sent
 });

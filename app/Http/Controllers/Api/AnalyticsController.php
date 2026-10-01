@@ -79,15 +79,7 @@ final class AnalyticsController extends Controller
             'today' => $today->toDateString(),
         ];
 
-        if ($platform === 'google_ads') {
-            return response()->json([
-                'filters' => $filters,
-                'summary' => ['period' => $period, ...app(GetGoogleAdsAttribution::class)->handle($shop, $start, $end)],
-                'meta' => $meta,
-            ]);
-        }
-
-        if ($platform === 'meta') {
+        if ($platform === 'google_ads' || $platform === 'meta') {
             $deliveryStats = $this->getPlatformDeliveryStats->handle($shop, $start, $end, $platform);
 
             $totals = [
@@ -95,10 +87,11 @@ final class AnalyticsController extends Controller
                 'delivered' => (int) array_sum(array_map(fn (array $s): int => $s['delivered'], $deliveryStats)),
                 'failed' => (int) array_sum(array_map(fn (array $s): int => $s['failed'], $deliveryStats)),
                 'pending' => (int) array_sum(array_map(fn (array $s): int => $s['pending'], $deliveryStats)),
+                'other_account' => (int) array_sum(array_map(fn (array $s): int => $s['other_account'], $deliveryStats)),
             ];
 
             $integration = $shop->platformIntegrations()
-                ->where('platform', Platform::Meta)
+                ->where('platform', $platform === 'meta' ? Platform::Meta : Platform::GoogleAds)
                 ->withCount(['conversionActionMappings as active_mappings_count' => fn ($query) => $query->where('active', true)])
                 ->first();
 
@@ -106,6 +99,7 @@ final class AnalyticsController extends Controller
                 'filters' => $filters,
                 'summary' => [
                     'period' => $period,
+                    ...($platform === 'google_ads' ? app(GetGoogleAdsAttribution::class)->handle($shop, $start, $end) : []),
                     'delivery_stats' => $deliveryStats,
                     'totals' => $totals,
                     'integration' => [

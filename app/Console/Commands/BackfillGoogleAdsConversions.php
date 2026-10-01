@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Services\GoogleAdsClient;
+use App\Services\GoogleAdsOtherAccountClassifier;
 use Illuminate\Console\Command;
 
 final class BackfillGoogleAdsConversions extends Command
@@ -22,7 +24,7 @@ final class BackfillGoogleAdsConversions extends Command
 
     protected $description = 'Upload previously unattempted GCLID events to a Google Ads integration';
 
-    public function handle(GoogleAdsClient $client): int
+    public function handle(GoogleAdsClient $client, GoogleAdsOtherAccountClassifier $classifier): int
     {
         $integration = PlatformIntegration::query()
             ->with(['user', 'conversionActionMappings'])
@@ -59,9 +61,9 @@ final class BackfillGoogleAdsConversions extends Command
             ->where('active', true)
             ->keyBy('event');
         $credentials = json_decode($integration->credentials, true);
-        $counts = ['delivered' => 0, 'partial_failure' => 0, 'failed' => 0, 'no_mapping' => 0];
+        $counts = ['delivered' => 0, 'partial_failure' => 0, 'other_account' => 0, 'failed' => 0, 'no_mapping' => 0];
 
-        $query->chunkById(50, function ($events) use ($client, $credentials, $integration, $mappings, &$counts): void {
+        $query->chunkById(50, function ($events) use ($client, $classifier, $credentials, $integration, $mappings, &$counts): void {
             foreach ($events as $event) {
                 $mapping = $mappings->get($event->event);
 
@@ -78,17 +80,38 @@ final class BackfillGoogleAdsConversions extends Command
                     'status' => 'queued',
                 ]);
 
+                if ($classifier->isOwnershipKnown($integration, $event)) {
+                    $delivery->update([
+                        'status' => GoogleAdsOtherAccountClassifier::STATUS,
+                        'response_body' => $classifier->skippedBody($classifier->customerId($integration)),
+                    ]);
+                    $counts[GoogleAdsOtherAccountClassifier::STATUS]++;
+
+                    continue;
+                }
+
                 try {
                     $success = $client->uploadConversion(
                         $credentials,
                         $this->toData($event, $integration->user->name),
                         $mapping,
                     );
-                    $status = $success ? 'delivered' : 'partial_failure';
+                    $failure = $success ? null : $client->partialFailure();
+                    $status = match (true) {
+                        $success => 'delivered',
+                        $classifier->isOtherAccountFailure($integration, $event, $failure) => GoogleAdsOtherAccountClassifier::STATUS,
+                        default => 'partial_failure',
+                    };
                     $delivery->update([
                         'status' => $status,
                         'attempts' => 1,
                         'sent_at' => now(),
+                        ...($failure instanceof PartialFailure ? [
+                            'response_code' => $failure->httpStatus,
+                            'response_body' => $status === GoogleAdsOtherAccountClassifier::STATUS
+                                ? $classifier->body($failure, $classifier->customerId($integration))
+                                : $failure->toJson(),
+                        ] : []),
                     ]);
                     $counts[$status]++;
                 } catch (\RuntimeException $exception) {

@@ -15,6 +15,7 @@ use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use App\Services\GoogleAdsOtherAccountClassifier;
 use Illuminate\Support\Facades\Log;
 use Lorisleiva\Actions\Concerns\AsJob;
 use Lorisleiva\Actions\Concerns\AsObject;
@@ -42,7 +43,10 @@ final class ProcessTrackingEvent
 
     public int $timeout = 60;
 
-    public function __construct(private readonly PlatformResolverContract $resolver) {}
+    public function __construct(
+        private readonly PlatformResolverContract $resolver,
+        private readonly GoogleAdsOtherAccountClassifier $classifier,
+    ) {}
 
     /**
      * Dispatch the event to all active platform integrations for the shop.
@@ -101,7 +105,7 @@ final class ProcessTrackingEvent
      * on every attempt.
      *
      * Retry-safe: an existing delivery row for this event + integration in a terminal
-     * status (delivered / partial_failure) is skipped, and a "queued"/"failed" row left by
+     * status (delivered / partial_failure / other_account) is skipped, and a "queued"/"failed" row left by
      * an earlier attempt is reused instead of inserting a duplicate.
      */
     private function processIntegration(
@@ -145,7 +149,7 @@ final class ProcessTrackingEvent
             ->latest('id')
             ->first();
 
-        if ($delivery instanceof PlatformDelivery && in_array($delivery->status, ['delivered', 'partial_failure'], true)) {
+        if ($delivery instanceof PlatformDelivery && in_array($delivery->status, ['delivered', 'partial_failure', GoogleAdsOtherAccountClassifier::STATUS], true)) {
             return;
         }
 
@@ -163,6 +167,14 @@ final class ProcessTrackingEvent
 
         $credentials = json_decode($integration->credentials, true);
 
+        // Ownership of this click was already established for the connected account: Google
+        // would reject it again, so record the outcome without calling the API.
+        if ($integration->platform === Platform::GoogleAds && $this->classifier->isOwnershipKnown($integration, $trackingEvent)) {
+            $this->recordSkipped($integration, $delivery, $trackingEvent);
+
+            return;
+        }
+
         try {
             $platform = $this->resolver->resolve($integration->platform);
             // Recover a click id lost after the landing page, for the Meta payload only.
@@ -174,20 +186,35 @@ final class ProcessTrackingEvent
             $failure = ! $success && $platform instanceof ReportsPartialFailure ? $platform->partialFailure() : null;
             $receipt = $success && $platform instanceof ReportsDeliveryReceipt ? $platform->deliveryReceipt() : null;
 
+            $otherAccount = $failure instanceof PartialFailure
+                && $integration->platform === Platform::GoogleAds
+                && $this->classifier->isOtherAccountFailure($integration, $trackingEvent, $failure);
+
             $delivery->update([
-                'status' => $success ? 'delivered' : 'partial_failure',
+                'status' => $success ? 'delivered' : ($otherAccount ? GoogleAdsOtherAccountClassifier::STATUS : 'partial_failure'),
                 'attempts' => $delivery->attempts + 1,
                 'sent_at' => now(),
                 ...($failure instanceof PartialFailure ? [
                     'response_code' => $failure->httpStatus,
-                    'response_body' => $failure->toJson(),
+                    'response_body' => $otherAccount
+                        ? $this->classifier->body($failure, $this->classifier->customerId($integration))
+                        : $failure->toJson(),
                 ] : []),
                 ...($receipt !== null ? ['response_code' => 200, 'response_body' => $receipt] : []),
             ]);
 
             $integration->last_success_at = $success ? now() : $integration->last_success_at;
 
-            if (! $success) {
+            if ($otherAccount) {
+                // Not a delivery failure: the click belongs to an unconnected account, so the
+                // integration's last_error is left alone.
+                Log::info('ProcessTrackingEvent: click belongs to another Google Ads account', [
+                    'integration_id' => $integration->getKey(),
+                    'tracking_event_id' => $trackingEvent->getKey(),
+                    'shop' => $data->shopDomain,
+                    'customer_id' => $this->classifier->customerId($integration),
+                ]);
+            } elseif (! $success) {
                 $integration->last_error = $failure instanceof PartialFailure ? $failure->lastError() : 'partial_failure';
                 $integration->last_error_at = now();
 
@@ -230,5 +257,21 @@ final class ProcessTrackingEvent
 
             throw $e;
         }
+    }
+
+    private function recordSkipped(PlatformIntegration $integration, PlatformDelivery $delivery, TrackingEvent $trackingEvent): void
+    {
+        $customerId = $this->classifier->customerId($integration);
+
+        $delivery->update([
+            'status' => GoogleAdsOtherAccountClassifier::STATUS,
+            'response_body' => $this->classifier->skippedBody($customerId),
+        ]);
+
+        Log::info('ProcessTrackingEvent: upload skipped, click owner already known to be another Google Ads account', [
+            'integration_id' => $integration->getKey(),
+            'tracking_event_id' => $trackingEvent->getKey(),
+            'customer_id' => $customerId,
+        ]);
     }
 }
