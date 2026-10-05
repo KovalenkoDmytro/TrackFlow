@@ -32,6 +32,11 @@ return [
     // Oldest pending queued job older than this many minutes means the worker is likely down.
     'queue_backlog_max_age_minutes' => (int) env('ALERT_QUEUE_BACKLOG_MAX_AGE_MINUTES', 15),
 
+    // platform_deliveries still `queued` and untouched for this many minutes (any platform) mean the
+    // job died mid-attempt. The retry chain takes ~7 min, so 60 leaves wide margin. Alerts at >= min count.
+    'stuck_delivery_max_age_minutes' => (int) env('ALERT_STUCK_DELIVERY_MAX_AGE_MINUTES', 60),
+    'stuck_delivery_min_count' => (int) env('ALERT_STUCK_DELIVERY_MIN_COUNT', 1),
+
     // Plain-language hints for delivery rejection codes, shown in the dead-integration alert.
     // `alert` false marks normal data conditions (old/fresh/duplicate events): they only
     // alert when EVERY delivery in the window has such a code and is never worth reconnecting for.

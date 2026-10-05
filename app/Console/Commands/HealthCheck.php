@@ -42,6 +42,7 @@ final class HealthCheck extends Command
             'Dead integrations' => $this->checkDeadIntegrations(...),
             'Integration mappings' => $this->checkMappings(...),
             'Queue backlog' => $this->checkQueueBacklog(...),
+            'Stuck deliveries' => $this->checkStuckDeliveries(...),
         ];
 
         $rows = [];
@@ -285,6 +286,38 @@ final class HealthCheck extends Command
         }
 
         return [];
+    }
+
+    /** @return array<string, string> */
+    private function checkStuckDeliveries(): array
+    {
+        $maxMinutes = (int) config('alerts.stuck_delivery_max_age_minutes');
+        $minCount = (int) config('alerts.stuck_delivery_min_count');
+
+        // A `queued` row is rewritten on every attempt, so one that has not been touched for
+        // far longer than the retry chain means the job died without reaching a final status.
+        $stuck = PlatformDelivery::query()
+            ->selectRaw('platform_integration_id, platform, COUNT(*) as total, MIN(updated_at) as oldest')
+            ->where('status', 'queued')
+            ->where('updated_at', '<', now()->subMinutes($maxMinutes))
+            ->groupBy('platform_integration_id', 'platform')
+            ->get();
+
+        $total = (int) $stuck->sum(fn (PlatformDelivery $row): int => (int) $row->getAttribute('total'));
+        if ($total === 0 || $total < $minCount) {
+            return [];
+        }
+
+        $byPlatform = $stuck->groupBy('platform')
+            ->map(fn ($rows, $platform): string => "{$platform} ".$rows->sum(fn (PlatformDelivery $row): int => (int) $row->getAttribute('total')))
+            ->implode(', ');
+        $integrationIds = $stuck->pluck('platform_integration_id')->unique()->sort()->values();
+        $userIds = PlatformIntegration::query()->whereIn('id', $integrationIds)->pluck('user_id')->unique()->sort()->values();
+        $oldest = now()->parse((string) $stuck->min(fn (PlatformDelivery $row): string => (string) $row->getAttribute('oldest')));
+
+        return ['stuck_deliveries' => "{$total} platform deliveries stuck in 'queued' for over {$maxMinutes} min ({$byPlatform}); oldest last updated {$oldest->toDateTimeString()} ({$oldest->diffForHumans()}). "
+            .'Integrations: '.$integrationIds->implode(', ').'; users: '.$userIds->implode(', ').'. '
+            ."Inspect with: App\\Models\\PlatformDelivery::query()->where('status', 'queued')->where('updated_at', '<', now()->subMinutes({$maxMinutes}))->get()."];
     }
 
     /** @param  array<string, string>  $problems */
