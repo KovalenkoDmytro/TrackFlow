@@ -30,12 +30,17 @@ final class GetGoogleAdsAttribution
                 ->where('customer_id', $customerId)
                 ->whereColumn('google_ads_clicks.gclid_hash', 'tracking_events.gclid_hash')
                 ->whereColumn('google_ads_clicks.day_start_utc', '<=', 'tracking_events.occurred_at');
-        })->selectRaw('event, COUNT(*) as total')->groupBy('event')->pluck('total', 'event');
+        });
+        $matchedByEvent = (clone $matched)->selectRaw('event, COUNT(*) as total, COUNT(DISTINCT gclid_hash) as clicks')
+            ->groupBy('event')->get()->keyBy('event');
+        $uniqueClicksTotal = (int) (clone $matched)->toBase()->selectRaw('COUNT(DISTINCT gclid_hash) as clicks')->value('clicks');
         $counts = [];
         foreach (TrackingEventType::cases() as $type) {
-            $count = (int) ($matched[$type->value] ?? 0);
+            $row = $matchedByEvent->get($type->value);
+            $count = (int) ($row?->total ?? 0);
             $counts[] = ['event' => $type->value, 'label' => $type->label(), 'count' => $count,
-                'unverified' => (int) ($tagged[$type->value] ?? 0) - $count];
+                'unverified' => (int) ($tagged[$type->value] ?? 0) - $count,
+                'unique_clicks' => (int) ($row?->clicks ?? 0)];
         }
         $sync = DB::table('google_ads_click_syncs')->where('platform_integration_id', $integration?->id ?? 0)
             ->where('customer_id', $customerId);
@@ -44,6 +49,7 @@ final class GetGoogleAdsAttribution
             'counts' => $counts,
             'total' => array_sum(array_column($counts, 'count')),
             'unverified_total' => array_sum(array_column($counts, 'unverified')),
+            'unique_clicks_total' => $uniqueClicksTotal,
             'attribution' => [
                 'connected' => $integration !== null,
                 'customer_id' => $customerId ?: null,

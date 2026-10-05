@@ -27,6 +27,7 @@ export interface AnalyticsParams {
 
 export interface EventCount {
   unverified?: number;
+  unique_clicks?: number;
   event: string;
   label: string;
   count: number;
@@ -39,6 +40,7 @@ export interface AnalyticsPeriod {
 
 export interface AnalyticsSummary {
   unverified_total?: number;
+  unique_clicks_total?: number;
   attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number };
   /** Present for the Google Ads platform: per-event delivery outcomes. */
   delivery_stats?: PlatformDeliveryStat[];

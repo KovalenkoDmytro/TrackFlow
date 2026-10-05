@@ -13,7 +13,8 @@ export function GoogleAdsAttributionTable({ summary, loading }: { summary?: Anal
       <Alert severity="info">
         Matched events have a click ID found in the connected Google Ads account's click report.
         Unverified events have a click ID, but no match has been established. They are excluded from the matched total.
-        These are storefront actions, not unique visitors or Google Ads conversion totals.
+        Matched counts storefront actions. Unique clicks counts the distinct Google Ads clicks (click IDs) behind the matched events.
+        Neither is a count of unique visitors or a Google Ads conversion total.
       </Alert>
       <Typography variant="body2" sx={{ mt: 1.5 }}>
         Google click reports can include invalid clicks. A match confirms the click ID belongs to this account;
@@ -33,12 +34,12 @@ export function GoogleAdsAttributionTable({ summary, loading }: { summary?: Anal
     </Box>
     <TableContainer>
       <Table size="small">
-        <TableHead><TableRow><TableCell>Event</TableCell><TableCell align="right">Matched to Google Ads</TableCell><TableCell align="right">Unverified</TableCell></TableRow></TableHead>
+        <TableHead><TableRow><TableCell>Event</TableCell><TableCell align="right">Matched to Google Ads</TableCell><TableCell align="right">Unique clicks</TableCell><TableCell align="right">Unverified</TableCell></TableRow></TableHead>
         <TableBody>{[...summary.counts].sort((a, b) => b.count - a.count).map(row => <TableRow key={row.event}>
           <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{row.label}</Typography><EventDescription event={row.event} /></TableCell>
-          <TableCell align="right">{row.count.toLocaleString()}</TableCell><TableCell align="right">{(row.unverified ?? 0).toLocaleString()}</TableCell>
+          <TableCell align="right">{row.count.toLocaleString()}</TableCell><TableCell align="right">{(row.unique_clicks ?? 0).toLocaleString()}</TableCell><TableCell align="right">{(row.unverified ?? 0).toLocaleString()}</TableCell>
         </TableRow>)}</TableBody>
-        <TableFooter><TableRow><TableCell>Total events</TableCell><TableCell align="right">{summary.total.toLocaleString()}</TableCell><TableCell align="right">{(summary.unverified_total ?? 0).toLocaleString()}</TableCell></TableRow></TableFooter>
+        <TableFooter><TableRow><TableCell>Total events</TableCell><TableCell align="right">{summary.total.toLocaleString()}</TableCell><TableCell align="right">{(summary.unique_clicks_total ?? 0).toLocaleString()}</TableCell><TableCell align="right">{(summary.unverified_total ?? 0).toLocaleString()}</TableCell></TableRow></TableFooter>
       </Table>
     </TableContainer>
   </>;

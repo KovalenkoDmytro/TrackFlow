@@ -133,3 +133,58 @@ it('syncs paginated click reports in account timezone and hashes historical even
     expect(DB::table('google_ads_clicks')->count())->toBe(2);
     $this->travelBack();
 });
+
+describe('unique clicks', function (): void {
+    beforeEach(function (): void {
+        $this->travelTo(now()->setDate(2026, 9, 25)->setTime(12, 0));
+        $this->shop = User::factory()->create();
+        $this->integration = PlatformIntegration::create([
+            'user_id' => $this->shop->id, 'platform' => Platform::GoogleAds, 'active' => true,
+            'credentials' => json_encode(['customer_id' => '1234567890']),
+        ]);
+        $this->event = function (TrackingEventType $type, string $gclid, bool $matched = true): void {
+            TrackingEvent::factory()->forUser($this->shop)->forEvent($type)
+                ->occurredAt('2026-09-25 10:00:00')->create(['gclid' => $gclid, 'gclid_hash' => hash('sha256', $gclid)]);
+            if ($matched && ! DB::table('google_ads_clicks')->where('gclid_hash', hash('sha256', $gclid))->exists()) {
+                DB::table('google_ads_clicks')->insert([
+                    'platform_integration_id' => $this->integration->id, 'customer_id' => '1234567890',
+                    'gclid_hash' => hash('sha256', $gclid), 'click_date' => '2026-09-25',
+                    'day_start_utc' => '2026-09-25 00:00:00', 'checked_at' => now(),
+                ]);
+            }
+        };
+        $this->summary = fn (string $date = '2026-09-25') => $this->withToken($this->shopifySessionToken($this->shop))
+            ->getJson('/api/analytics?platform=google_ads&date='.$date)->assertOk();
+    });
+
+    afterEach(fn () => $this->travelBack());
+
+    it('counts distinct click IDs per event while count stays the number of events', function (): void {
+        foreach (['a', 'a', 'b'] as $id) {
+            ($this->event)(TrackingEventType::AddToCart, $id);
+        }
+        $row = collect(($this->summary)()->json('summary.counts'))->firstWhere('event', TrackingEventType::AddToCart->value);
+        expect($row['count'])->toBe(3)->and($row['unique_clicks'])->toBe(2);
+    });
+
+    it('counts a click ID shared by several events once in the total', function (): void {
+        ($this->event)(TrackingEventType::ViewItem, 'a');
+        ($this->event)(TrackingEventType::AddToCart, 'a');
+        ($this->event)(TrackingEventType::AddToCart, 'b');
+        $rows = collect(($this->summary)()->json('summary.counts'))->keyBy('event');
+        expect($rows[TrackingEventType::ViewItem->value]['unique_clicks'])->toBe(1)
+            ->and($rows[TrackingEventType::AddToCart->value]['unique_clicks'])->toBe(2);
+        ($this->summary)()->assertJsonPath('summary.total', 3)->assertJsonPath('summary.unique_clicks_total', 2);
+    });
+
+    it('does not count unverified events as clicks', function (): void {
+        ($this->event)(TrackingEventType::ViewItem, 'a');
+        ($this->event)(TrackingEventType::ViewItem, 'unmatched', false);
+        ($this->summary)()->assertJsonPath('summary.unique_clicks_total', 1)->assertJsonPath('summary.unverified_total', 1);
+    });
+
+    it('returns zeros for an empty period', function (): void {
+        $response = ($this->summary)('2026-09-20')->assertJsonPath('summary.unique_clicks_total', 0);
+        expect(collect($response->json('summary.counts'))->pluck('unique_clicks')->unique()->all())->toBe([0]);
+    });
+});
