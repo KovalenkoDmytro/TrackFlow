@@ -73,7 +73,11 @@ export interface PlatformDeliveryStat {
   pending: number;
   /** Google Ads only: click belongs to a Google Ads account that is not connected (not a failure). */
   other_account: number;
+  /** Google Ads only: click older than the conversion window (not a failure). */
+  expired: number;
   last_error: string | null;
+  /** Which kind of row last_error came from: 'expired' is informational, not a failure. */
+  last_error_status?: 'failed' | 'expired' | null;
 }
 
 export interface PlatformDeliveryTotals {
@@ -82,6 +86,7 @@ export interface PlatformDeliveryTotals {
   failed: number;
   pending: number;
   other_account: number;
+  expired: number;
 }
 
 export interface PlatformIntegrationState {

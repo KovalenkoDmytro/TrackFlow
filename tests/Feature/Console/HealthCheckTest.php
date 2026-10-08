@@ -256,6 +256,48 @@ it('ignores other_account rows in the dead integration check and in its reasons'
         && ! str_contains($m->problems[0], 'Other reasons'));
 });
 
+it('excludes expired rows from the delivery failure percentage', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    $make = fn (string $status, int $n) => collect(range(1, $n))->each(fn () => PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => 'google_ads', 'status' => $status, 'attempts' => 3,
+    ]));
+    DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->toDateString(), 'checked_at' => now()->subHour(),
+    ]);
+
+    $make('failed', 5);
+    $make('expired', 20);
+    $make('delivered', 1);
+
+    // 5 failed of 6 counted rows (expired excluded) = 83%; with expired in the total it would be 19% and pass.
+    $this->artisan('health:check --no-mail')->assertFailed();
+    // Expired alone never counts as a failure.
+    PlatformDelivery::query()->where('status', 'failed')->delete();
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+});
+
+it('ignores expired rows in the dead integration check and in its reasons', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, array_fill(0, 10, 'EXPIRED_EVENT'));
+    PlatformDelivery::query()->update(['status' => 'expired']);
+
+    // Only expired rows: nothing to alert about.
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // Expired rows do not count towards the minimum either.
+    deadRows($integration, array_fill(0, 9, 'INVALID_CONVERSION_ACTION'));
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    deadRows($integration, ['INVALID_CONVERSION_ACTION']);
+    $this->artisan('health:check')->assertFailed();
+    Mail::assertSent(HealthAlertMail::class, fn (HealthAlertMail $m) => str_contains($m->problems[0], '10 deliveries in 24h, none delivered')
+        && str_contains($m->problems[0], 'Top reason: INVALID_CONVERSION_ACTION (10)')
+        && ! str_contains($m->problems[0], 'EXPIRED_EVENT'));
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);

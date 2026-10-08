@@ -88,6 +88,7 @@ final class AnalyticsController extends Controller
                 'failed' => (int) array_sum(array_map(fn (array $s): int => $s['failed'], $deliveryStats)),
                 'pending' => (int) array_sum(array_map(fn (array $s): int => $s['pending'], $deliveryStats)),
                 'other_account' => (int) array_sum(array_map(fn (array $s): int => $s['other_account'], $deliveryStats)),
+                'expired' => (int) array_sum(array_map(fn (array $s): int => $s['expired'], $deliveryStats)),
             ];
 
             $integration = $shop->platformIntegrations()

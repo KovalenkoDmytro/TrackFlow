@@ -130,7 +130,7 @@ final class HealthCheck extends Command
                 "platform_integration_id, platform, COUNT(*) as total, SUM(CASE WHEN status = 'failed' AND (attempts >= ? OR updated_at <= ?) THEN 1 ELSE 0 END) as failures",
                 [$tries, now()->subMinutes(10)],
             )
-            ->where('status', '!=', 'other_account')
+            ->whereNotIn('status', ['other_account', PlatformDelivery::STATUS_EXPIRED])
             ->where('created_at', '>=', now()->subHour())
             ->groupBy('platform_integration_id', 'platform')
             ->get();
@@ -155,7 +155,7 @@ final class HealthCheck extends Command
         $stats = PlatformDelivery::query()
             ->selectRaw("platform_integration_id, platform, COUNT(*) as total, SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered")
             ->whereIn('platform_integration_id', PlatformIntegration::query()->where('active', true)->select('id'))
-            ->where('status', '!=', 'other_account') // clicks of an unconnected account are not a delivery problem
+            ->whereNotIn('status', ['other_account', PlatformDelivery::STATUS_EXPIRED]) // unconnected-account and out-of-window clicks are not a delivery problem
             ->where('created_at', '>=', now()->subDay())
             ->groupBy('platform_integration_id', 'platform')
             ->get();
@@ -215,7 +215,7 @@ final class HealthCheck extends Command
         $codes = PlatformDelivery::query()
             ->where('platform_integration_id', $integrationId)
             ->where('created_at', '>=', now()->subDay())
-            ->whereNotIn('status', ['delivered', 'other_account'])
+            ->whereNotIn('status', ['delivered', 'other_account', PlatformDelivery::STATUS_EXPIRED])
             ->whereNotNull('response_body')
             ->limit(2000)
             ->pluck('response_body')

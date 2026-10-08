@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class PlatformDelivery extends Model
 {
+    /** Terminal: Google would reject (or did reject) the click as older than the conversion window. */
+    public const string STATUS_EXPIRED = 'expired';
+
     protected $fillable = [
         'tracking_event_id',
         'platform_integration_id',

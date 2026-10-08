@@ -83,6 +83,30 @@ it('reclassifies provable rows reversibly, leaves the rest untouched and resets 
     expect($foreign->fresh()->response_body)->toBe($before);
 });
 
+it('ignores expired rows even when they carry the other-account code and keeps partial_failure reclassification intact', function (): void {
+    $integration = reclassifySetup();
+    $expired = reclassifyRow($integration, 'expired-foreign', RECLASSIFY_BODY, 'expired');
+    $foreign = reclassifyRow($integration, 'foreign', RECLASSIFY_BODY);
+    $expiredBefore = $expired->fresh()->response_body;
+
+    $this->artisan('google-ads:reclassify-other-account', ['integration' => $integration->getKey()])->assertSuccessful();
+
+    expect($expired->fresh()->status)->toBe('expired')
+        ->and($expired->fresh()->response_body)->toBe($expiredBefore)
+        ->and($foreign->fresh()->status)->toBe('other_account')
+        ->and(json_decode((string) $foreign->fresh()->response_body, true))->toMatchArray(['previous_status' => 'partial_failure']);
+});
+
+it('does not count expired rows as remaining failures when resetting last_error', function (): void {
+    $integration = reclassifySetup();
+    reclassifyRow($integration, 'old', '{"codes":["EXPIRED_EVENT"],"message":"m"}', 'expired');
+    reclassifyRow($integration, 'foreign', RECLASSIFY_BODY);
+
+    $this->artisan('google-ads:reclassify-other-account', ['integration' => $integration->getKey()])->assertSuccessful();
+
+    expect($integration->fresh()->last_error)->toBeNull();
+});
+
 it('resets last_error when no other failure remains', function (): void {
     $integration = reclassifySetup();
     reclassifyRow($integration, 'foreign', RECLASSIFY_BODY);

@@ -1,5 +1,6 @@
 import { EventDescription } from '../../../components/ui/EventDescription';
 // resources/js/features/analytics/components/PlatformDeliveryTable.tsx
+import { useState } from 'react';
 import {
   Alert,
   Box,
@@ -24,12 +25,70 @@ interface PlatformDeliveryTableProps {
   integration?: PlatformIntegrationState;
   /** Google Ads only: show the "Other account" column. */
   showOtherAccount?: boolean;
+  /** Google Ads only: show the "Expired" column. */
+  showExpired?: boolean;
 }
 
 const OTHER_ACCOUNT_TOOLTIP =
   'The ad click came from a Google Ads account that is not connected. Google only accepts the conversion in the account that owns the click.';
 
-export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 'Meta', integration, showOtherAccount = false }: PlatformDeliveryTableProps) {
+const EXPIRED_TOOLTIP =
+  'The ad click is older than the conversion window of the conversion action, so Google would reject it (EXPIRED_EVENT). These events are not uploaded and are not failures.';
+
+/** Renders stored response_body: JSON {codes, message} becomes "CODE: message", anything else is shown as is. */
+function formatLastError(raw: string): string {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const { codes, message } = parsed as { codes?: unknown; message?: unknown };
+      const code = Array.isArray(codes) && codes.length > 0 ? codes.join(', ') : '';
+      const text = typeof message === 'string' ? message : '';
+      if (code || text) {
+        return code && text ? `${code}: ${text}` : code || text;
+      }
+    }
+  } catch {
+    // not JSON: fall through
+  }
+  return raw;
+}
+
+function LastErrorCell({ value, status }: { value: string; status?: 'failed' | 'expired' | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const text = formatLastError(value);
+
+  return (
+    <Typography
+      variant="body2"
+      color={status === 'expired' ? 'text.secondary' : 'error.main'}
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      title={expanded ? undefined : text}
+      onClick={() => setExpanded((open) => !open)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setExpanded((open) => !open);
+        }
+      }}
+      sx={{
+        cursor: 'pointer',
+        whiteSpace: expanded ? 'pre-wrap' : 'nowrap',
+        overflowWrap: 'anywhere',
+        overflow: 'hidden',
+        textOverflow: expanded ? 'clip' : 'ellipsis',
+        wordBreak: 'break-word',
+        maxWidth: 240,
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 0.5 },
+      }}
+    >
+      {text}
+    </Typography>
+  );
+}
+
+export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 'Meta', integration, showOtherAccount = false, showExpired = false }: PlatformDeliveryTableProps) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -67,6 +126,13 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
               <TableCell align="right">
                 <Tooltip title={OTHER_ACCOUNT_TOOLTIP}>
                   <span>Other account</span>
+                </Tooltip>
+              </TableCell>
+            )}
+            {showExpired && (
+              <TableCell align="right">
+                <Tooltip title={EXPIRED_TOOLTIP}>
+                  <span>Expired</span>
                 </Tooltip>
               </TableCell>
             )}
@@ -129,19 +195,20 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
                   </Typography>
                 </TableCell>
               )}
-              <TableCell sx={{ maxWidth: 200, display: { xs: 'none', sm: 'table-cell' } }}>
+              {showExpired && (
+                <TableCell align="right">
+                  <Typography
+                    variant="body2"
+                    sx={{ fontVariantNumeric: 'tabular-nums' }}
+                    color={row.expired === 0 ? 'text.disabled' : 'text.primary'}
+                  >
+                    {row.expired.toLocaleString()}
+                  </Typography>
+                </TableCell>
+              )}
+              <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                 {row.last_error ? (
-                  <Tooltip title={row.last_error}>
-                    <Typography
-                      variant="body2"
-                      color="error.main"
-                      noWrap
-                      sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                      title={row.last_error}
-                    >
-                      {row.last_error}
-                    </Typography>
-                  </Tooltip>
+                  <LastErrorCell value={row.last_error} status={row.last_error_status} />
                 ) : (
                   <Typography variant="body2" color="text.disabled">
                     —
@@ -178,6 +245,13 @@ export function PlatformDeliveryTable({ stats, totals, loading, platformLabel = 
               <TableCell align="right">
                 <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                   {totals.other_account.toLocaleString()}
+                </Typography>
+              </TableCell>
+            )}
+            {showExpired && (
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {totals.expired.toLocaleString()}
                 </Typography>
               </TableCell>
             )}

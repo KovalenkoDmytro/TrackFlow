@@ -233,3 +233,33 @@ it('classifies other_account like the live path and skips known gclids without c
         ->and($integration->fresh()->last_error)->toBeNull();
     Http::assertSentCount(2); // one token request + one upload: the second event was never sent
 });
+
+it('does not re-select events that already have a delivered, failed or expired row and writes nothing on dry run', function (): void {
+    fakeGoogleAdsOAuthToken();
+    $shop = User::factory()->create();
+    $integration = createGoogleAdsIntegration($shop);
+    ConversionActionMapping::query()->create([
+        'platform_integration_id' => $integration->getKey(), 'event' => 'purchase',
+        'external_action_id' => 'customers/1234567890/conversionActions/1', 'active' => true,
+    ]);
+
+    foreach (['delivered', 'failed', 'expired'] as $status) {
+        $event = TrackingEvent::factory()->forUser($shop)->forEvent(TrackingEventType::Purchase)
+            ->state(['gclid' => 'g-'.$status, 'occurred_at' => now()->subDays(60)])->create();
+        PlatformDelivery::query()->create([
+            'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+            'platform' => 'google_ads', 'status' => $status,
+        ]);
+    }
+
+    $this->artisan('google-ads:backfill', ['integration' => $integration->getKey()])
+        ->expectsOutputToContain('Eligible events: 0')
+        ->assertSuccessful();
+    $this->artisan('google-ads:backfill', ['integration' => $integration->getKey(), '--dry-run' => true])
+        ->expectsOutputToContain('Eligible events: 0')
+        ->assertSuccessful();
+
+    expect(PlatformDelivery::query()->count())->toBe(3)
+        ->and(PlatformDelivery::query()->pluck('status')->sort()->values()->all())->toBe(['delivered', 'expired', 'failed']);
+    Http::assertNothingSent();
+});

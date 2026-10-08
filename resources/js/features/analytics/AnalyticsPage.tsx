@@ -56,7 +56,7 @@ export function AnalyticsPage() {
   const total = eventCountsData?.summary?.total ?? 0;
   const period = data?.summary?.period ?? null;
   const deliveryStats = deliveryData?.summary?.delivery_stats ?? [];
-  const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0, other_account: 0 };
+  const deliveryTotals = deliveryData?.summary?.totals ?? { attempted: 0, delivered: 0, failed: 0, pending: 0, other_account: 0, expired: 0 };
   const retentionDays = data?.meta?.retention_days ?? DEFAULT_RETENTION_DAYS;
 
   const title = platform === 'google_ads' ? 'Google Ads click-matched events' : platform ? `${PLATFORM_LABELS[platform] ?? platform} Events` : 'Analytics';
@@ -115,6 +115,7 @@ export function AnalyticsPage() {
               platformLabel="Google Ads"
               integration={deliveryData?.summary?.integration}
               showOtherAccount
+              showExpired
             />
           </>
         ) : isMeta ? (

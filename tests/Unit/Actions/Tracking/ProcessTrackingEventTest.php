@@ -56,7 +56,7 @@ function fakeTrackingData(User $shop, ?string $gclid = 'gclid-1', ?string $gaCli
         ip: '127.0.0.1',
         userAgent: 'test',
         idempotencyKey: 'idem-1',
-        occurredAt: new DateTimeImmutable('2026-07-31T12:00:00+00:00'),
+        occurredAt: now()->subHour()->toDateTimeImmutable(),
     );
 }
 
