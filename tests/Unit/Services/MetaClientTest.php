@@ -8,7 +8,9 @@ use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
 use App\Models\User;
 use App\Services\MetaClient;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 function makeTrackingEventData(array $overrides = []): TrackingEventData
 {
@@ -221,6 +223,41 @@ describe('MetaClient::uploadConversion payload', function (): void {
         $event = sendMetaEvent(['transactionId' => null, 'event' => 'search'], 'Search');
 
         expect($event['event_id'])->toBe(md5('Search|2026-01-01T00:00:00+00:00|idem-key-1'));
+    });
+});
+
+describe('MetaClient event_time clamp', function (): void {
+    beforeEach(fn () => Carbon::setTestNow(Carbon::parse('2026-10-08 12:00:00', 'UTC')));
+    afterEach(fn () => Carbon::setTestNow());
+
+    it('caps a future event_time at now and logs only the skew', function (): void {
+        Log::spy();
+
+        $event = sendMetaEvent(['occurredAt' => new DateTimeImmutable('2026-10-08 12:05:00+00:00')]);
+
+        expect($event['event_time'])->toBe(Carbon::now()->getTimestamp());
+        Log::shouldHaveReceived('warning')->once()->withArgs(
+            fn (string $m, array $c): bool => $m === 'meta.event_time_clamped' && $c === ['skew_seconds' => 300],
+        );
+    });
+
+    it('leaves a past event_time unchanged', function (): void {
+        $past = new DateTimeImmutable('2026-10-08 11:00:00+00:00');
+
+        expect(sendMetaEvent(['occurredAt' => $past])['event_time'])->toBe($past->getTimestamp());
+    });
+
+    it('keeps the dedup event_id identical regardless of now', function (): void {
+        $future = new DateTimeImmutable('2026-10-08 12:05:00+00:00');
+        $expected = md5('Search|2026-10-08T12:05:00+00:00|idem-key-1');
+
+        $clamped = sendMetaEvent(['transactionId' => null, 'occurredAt' => $future], 'Search');
+        Carbon::setTestNow(Carbon::parse('2026-10-08 13:00:00', 'UTC'));
+        $notClamped = sendMetaEvent(['transactionId' => null, 'occurredAt' => $future], 'Search');
+
+        expect($clamped['event_id'])->toBe($expected)
+            ->and($notClamped['event_id'])->toBe($expected)
+            ->and($notClamped['event_time'])->toBe($future->getTimestamp());
     });
 });
 

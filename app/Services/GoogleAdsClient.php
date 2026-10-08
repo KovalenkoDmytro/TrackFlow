@@ -10,6 +10,7 @@ use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -282,10 +283,23 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
         $accessToken = $this->getAccessToken($credentials['oauth']);
         $customerId = str_replace('-', '', $credentials['customer_id']);
 
+        $now = CarbonImmutable::now();
+        $conversionTime = $this->clampConversionTime($data->occurredAt, $now);
+
+        // Only a time ahead of our own clock is a clock-skew signal worth a warning; a time within the
+        // safety margin of "now" is clamped silently (every live upload happens seconds after the event).
+        if ($data->occurredAt->getTimestamp() > $now->getTimestamp()) {
+            // Browser clocks can run ahead of Google's; the stored event time is left untouched.
+            Log::warning('google_ads.conversion_time_clamped', [
+                'skew_seconds' => $data->occurredAt->getTimestamp() - $now->getTimestamp(),
+                'google_ads_customer_id' => $customerId,
+            ]);
+        }
+
         $conversion = [
             'gclid' => $data->gclid,
             'conversion_action' => $conversionActionResourceName,
-            'conversion_date_time' => $data->occurredAt->format('Y-m-d H:i:sP'),
+            'conversion_date_time' => $conversionTime->format('Y-m-d H:i:sP'),
             'conversion_value' => $data->value,
             'currency_code' => $data->currency,
             'order_id' => $data->transactionId,
@@ -322,6 +336,20 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
         }
 
         return true;
+    }
+
+    /**
+     * Cap the conversion time at now minus the configured safety margin, in UTC.
+     *
+     * Google rejects conversion times later than its own clock (LATER_THAN_MAXIMUM_DATE),
+     * and the pixel reports the shopper's browser clock, which can run ahead of ours.
+     */
+    public function clampConversionTime(\DateTimeInterface $occurredAt, CarbonImmutable $now): CarbonImmutable
+    {
+        $maximum = $now->subSeconds((int) config('tracking.google_ads.future_clamp_seconds', 60));
+        $occurred = CarbonImmutable::instance($occurredAt);
+
+        return ($occurred->greaterThan($maximum) ? $maximum : $occurred)->utc();
     }
 
     public function partialFailure(): ?PartialFailure

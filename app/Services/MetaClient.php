@@ -11,6 +11,7 @@ use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -222,9 +223,18 @@ final class MetaClient implements ConversionPlatformContract, ReportsDeliveryRec
             $metaEventName.'|'.$data->occurredAt->format(\DateTimeInterface::ATOM).'|'.($data->idempotencyKey ?? ''),
         );
 
+        // Browser clocks can run ahead of ours and Meta rejects future event times. Only the value
+        // sent is capped at now; the stored time and the dedup id above keep the original occurredAt.
+        $now = Carbon::now()->getTimestamp();
+        $eventTime = $data->occurredAt->getTimestamp();
+        if ($eventTime > $now) {
+            Log::warning('meta.event_time_clamped', ['skew_seconds' => $eventTime - $now]);
+            $eventTime = $now;
+        }
+
         $event = [
             'event_name' => $metaEventName,
-            'event_time' => $data->occurredAt->getTimestamp(),
+            'event_time' => $eventTime,
             'action_source' => 'website',
             'event_id' => $eventId,
             'user_data' => $userData,

@@ -47,6 +47,7 @@ return [
         'TOO_RECENT_CONVERSION_ACTION' => ['alert' => true, 'hint' => 'the conversion action was created very recently; this is temporary and should clear within about 6 hours.'],
         'EXPIRED_EVENT' => ['alert' => false, 'hint' => 'the click is older than the allowed upload window (normal for late events).'],
         'TOO_RECENT_EVENT' => ['alert' => false, 'hint' => 'the click is too recent for Google to process (normal, self-resolving).'],
+        'LATER_THAN_MAXIMUM_DATE' => ['alert' => false, 'hint' => "Event time was ahead of Google's clock (typically the shopper's browser clock running fast). Newer uploads clamp the time, so this should not recur."],
         'CLICK_CONVERSION_ALREADY_EXISTS' => ['alert' => false, 'hint' => 'this conversion was already uploaded (duplicate).'],
         'ORDER_ID_ALREADY_IN_USE' => ['alert' => false, 'hint' => 'this order id was already used for an upload (duplicate).'],
     ],

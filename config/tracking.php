@@ -15,6 +15,9 @@ return [
         'default_click_window_days' => (int) env('TRACKING_GOOGLE_ADS_DEFAULT_CLICK_WINDOW_DAYS', 30),
         // Events whose age is within this many days of the window edge are not uploaded.
         'safety_margin_days' => (int) env('TRACKING_GOOGLE_ADS_SAFETY_MARGIN_DAYS', 5),
+        // Conversion times are capped at now minus this many seconds (browser clocks can run ahead
+        // of Google's, which rejects future times with LATER_THAN_MAXIMUM_DATE).
+        'future_clamp_seconds' => (int) env('TRACKING_GOOGLE_ADS_FUTURE_CLAMP_SECONDS', 60),
     ],
 
     'view_item_rate_limit' => [
