@@ -48,6 +48,12 @@ final class SentryScrubber
             $event->setRequest(self::scrubArray($request));
         }
 
+        $event->setMessage(SecretRedactor::redact((string) $event->getMessage()));
+
+        foreach ($event->getExceptions() as $exception) {
+            $exception->setValue(SecretRedactor::redact($exception->getValue()));
+        }
+
         $event->setExtra(self::scrubArray($event->getExtra()));
 
         foreach ($event->getContexts() as $name => $context) {
@@ -82,6 +88,8 @@ final class SentryScrubber
                 $data[$key] = self::FILTERED;
             } elseif (is_array($value)) {
                 $data[$key] = self::scrubArray($value);
+            } elseif (is_string($value)) {
+                $data[$key] = SecretRedactor::redact($value);
             }
         }
 

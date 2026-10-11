@@ -8,6 +8,7 @@ use App\Contracts\ConversionPlatformContract;
 use App\Data\TrackingEventData;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
+use App\Support\SecretRedactor;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -158,7 +159,7 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
             } catch (\Throwable $e) {
                 Log::error('GoogleAnalytics4Client: failed to create Admin API Key Events', [
                     'integration_id' => $integration->getKey(),
-                    'error' => $e->getMessage(),
+                    'error' => SecretRedactor::redact($e->getMessage()),
                 ]);
             }
         }
@@ -179,7 +180,7 @@ final class GoogleAnalytics4Client implements ConversionPlatformContract
                 Log::error('GoogleAnalytics4Client: failed to upsert conversion action mapping', [
                     'integration_id' => $integration->getKey(),
                     'event' => $shopifyEvent,
-                    'error' => $e->getMessage(),
+                    'error' => SecretRedactor::redact($e->getMessage()),
                 ]);
             }
         }

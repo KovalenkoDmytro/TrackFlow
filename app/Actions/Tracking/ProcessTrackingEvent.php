@@ -17,6 +17,7 @@ use App\Models\TrackingEvent;
 use App\Models\User;
 use App\Services\GoogleAdsConversionWindow;
 use App\Services\GoogleAdsOtherAccountClassifier;
+use App\Support\SecretRedactor;
 use Illuminate\Support\Facades\Log;
 use Lorisleiva\Actions\Concerns\AsJob;
 use Lorisleiva\Actions\Concerns\AsObject;
@@ -276,20 +277,23 @@ final class ProcessTrackingEvent
                 'success' => $success,
             ]);
         } catch (\Throwable $e) {
+            $message = SecretRedactor::redact($e->getMessage());
+
             $delivery->update([
                 'status' => 'failed',
                 'attempts' => $delivery->attempts + 1,
-                'response_body' => $e->getMessage(),
+                'response_body' => $message,
             ]);
 
-            $integration->last_error = $e->getMessage();
+            // platform_integrations.last_error is varchar(255): an unbounded write would throw.
+            $integration->last_error = SecretRedactor::bounded($message);
             $integration->last_error_at = now();
             $integration->save();
 
             Log::error('ProcessTrackingEvent: failed', [
                 'platform' => $integration->platform->value,
                 'event' => $data->event,
-                'error' => $e->getMessage(),
+                'error' => $message,
             ]);
 
             throw $e;

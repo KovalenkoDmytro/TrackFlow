@@ -119,6 +119,24 @@ describe('ProcessTrackingEvent', function (): void {
             ->and(PlatformDelivery::query()->where('platform_integration_id', $meta->getKey())->value('status'))->toBe('delivered');
     });
 
+    it('stores a long exception message bounded and without the api_secret', function (): void {
+        Log::spy();
+        $ga4 = connectFakeIntegration($this->shop, Platform::GoogleAnalytics4);
+        $message = 'cURL error 28: Failed to connect to www.google-analytics.com port 443 after 10002 ms: Couldn\'t connect to server (see https://curl.se/libcurl/c/libcurl-errors.html) for https://www.google-analytics.com/mp/collect?measurement_id=G-SVX1JFRHKP&api_secret=TOPSECRET123 '.str_repeat('pad ', 30);
+        bindFakeResolver(['ga4' => new FakePlatformDriver(new RuntimeException($message))]);
+
+        expect(fn () => app(ProcessTrackingEvent::class)->handle(fakeTrackingData($this->shop, null, 'cid-1')))
+            ->toThrow(RuntimeException::class);
+
+        $ga4->refresh();
+        expect(mb_strlen($message))->toBeGreaterThan(255)
+            ->and($ga4->last_error)->not->toBeNull()
+            ->and(mb_strlen((string) $ga4->last_error))->toBeLessThanOrEqual(255)
+            ->and($ga4->last_error)->not->toContain('TOPSECRET123')
+            ->and((string) PlatformDelivery::query()->value('response_body'))->not->toContain('TOPSECRET123');
+        Log::shouldHaveReceived('error')->withArgs(fn ($m, $ctx) => $m === 'ProcessTrackingEvent: failed' && ! str_contains((string) $ctx['error'], 'TOPSECRET123'))->once();
+    });
+
     it('retries only the failed integration and does not duplicate delivery rows', function (): void {
         $google = connectFakeIntegration($this->shop, Platform::GoogleAds);
         connectFakeIntegration($this->shop, Platform::Meta);
