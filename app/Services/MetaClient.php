@@ -176,9 +176,9 @@ final class MetaClient implements ConversionPlatformContract, ReportsDeliveryRec
      *
      * Returns false (no retry) when there is no fbp, fbc, or IP to attribute the
      * event to — without at least one of these Meta cannot match the event to a
-     * user. Uses transactionId as the event_id for deduplication with the Meta
-     * Pixel's browser-side events when present, otherwise falls back to a stable
-     * hash of the event so retries of the same job do not create duplicate events.
+     * user. Uses the raw Shopify event.id (the idempotency key) as the event_id so
+     * Meta deduplicates against the browser events of Shopify's Facebook & Instagram
+     * integration. Without it, falls back to the order id / a stable hash of the event.
      *
      * @param  array<string, mixed>  $credentials  Must contain: pixel_id, access_token. Optionally: test_event_code.
      * @param  TrackingEventData  $data  Event payload.
@@ -219,9 +219,11 @@ final class MetaClient implements ConversionPlatformContract, ReportsDeliveryRec
             $customData = ['currency' => $data->currency, 'value' => $data->value];
         }
 
-        $eventId = $data->transactionId ?? md5(
-            $metaEventName.'|'.$data->occurredAt->format(\DateTimeInterface::ATOM).'|'.($data->idempotencyKey ?? ''),
-        );
+        // Shopify's native Facebook & Instagram integration sends the raw Customer Events
+        // event.id as the browser event_id; the web pixel forwards the same id as the
+        // idempotency key, so using it verbatim lets Meta deduplicate browser and server events.
+        // Purchase uses the checkout_completed event.id too (the order id goes in custom_data).
+        $eventId = $this->resolveEventId($data, $metaEventName);
 
         // Browser clocks can run ahead of ours and Meta rejects future event times. Only the value
         // sent is capped at now; the stored time and the dedup id above keep the original occurredAt.
@@ -240,8 +242,13 @@ final class MetaClient implements ConversionPlatformContract, ReportsDeliveryRec
             'user_data' => $userData,
         ];
 
-        if ($data->eventSourceUrl !== null) {
-            $event['event_source_url'] = $data->eventSourceUrl;
+        $sourceUrl = $data->eventSourceUrl ?? $this->fallbackSourceUrl($data);
+        if ($sourceUrl !== null) {
+            $event['event_source_url'] = $sourceUrl;
+        }
+
+        if ($metaEventName === self::PURCHASE_EVENT_NAME && $data->transactionId !== null) {
+            $customData['order_id'] = $data->transactionId;
         }
 
         if ($customData !== []) {
@@ -265,6 +272,38 @@ final class MetaClient implements ConversionPlatformContract, ReportsDeliveryRec
         $status = $response->status();
         $errorMessage = $this->extractApiError($response->json(), $response->body());
         throw new \RuntimeException("Meta CAPI error [{$status}]: {$errorMessage}");
+    }
+
+    /**
+     * Raw Shopify event.id when known; otherwise the legacy id (order id for purchases, else a
+     * stable hash of the event) so retries of the same job still produce the same event_id.
+     */
+    private function resolveEventId(TrackingEventData $data, string $metaEventName): string
+    {
+        if ($data->idempotencyKey !== null && $data->idempotencyKey !== '') {
+            return $data->idempotencyKey;
+        }
+
+        Log::warning('meta.event_id_fallback', ['event' => $metaEventName, 'reason' => 'missing_idempotency_key']);
+
+        return $data->transactionId ?? md5(
+            $metaEventName.'|'.$data->occurredAt->format(\DateTimeInterface::ATOM).'|',
+        );
+    }
+
+    /**
+     * Server-side event_source_url when the pixel sent none: the cart page for view_cart, the
+     * shop root otherwise. Never a checkout/order-status URL (they carry private tokens).
+     */
+    private function fallbackSourceUrl(TrackingEventData $data): ?string
+    {
+        $host = strtolower(trim($data->shopDomain));
+
+        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/', $host) !== 1) {
+            return null;
+        }
+
+        return 'https://'.$host.($data->event === 'view_cart' ? '/cart' : '/');
     }
 
     public function partialFailure(): ?PartialFailure

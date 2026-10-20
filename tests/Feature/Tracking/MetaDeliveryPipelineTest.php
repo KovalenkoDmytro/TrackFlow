@@ -64,7 +64,49 @@ describe('Meta delivery through POST /api/conversions', function (): void {
         $this->postJson('/api/conversions', metaPayload($this->shop, ['event_source_url' => 'http://store.test/p']))->assertOk();
         $this->postJson('/api/conversions', metaPayload($this->shop, ['event_source_url' => 'not a url']))->assertOk();
 
-        Http::assertSent(fn ($request) => ! array_key_exists('event_source_url', $request->data()['data'][0]));
+        // The dropped URL is replaced by the server-side shop-root fallback, never the bad input.
+        Http::assertSent(fn ($request) => $request->data()['data'][0]['event_source_url'] === 'https://'.$this->shop->name.'/');
+    });
+
+    it('delivers the raw idempotency key as Meta event_id end to end, including a null price event', function (): void {
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['events_received' => 1, 'fbtrace_id' => 'TR1'], 200)]);
+        $key = 'sh-5aa205ea-3E48-4604-FD61-80406BBA03AB';
+
+        $this->postJson('/api/conversions', metaPayload($this->shop, [
+            'idempotency_key' => $key,
+            'value' => null,
+            'currency' => null,
+        ]))->assertOk();
+
+        Http::assertSent(fn ($request) => $request->data()['data'][0]['event_id'] === $key
+            && ! array_key_exists('custom_data', $request->data()['data'][0]));
+    });
+
+    it('delivers a purchase to Meta with its value, currency, order_id and raw event_id', function (): void {
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['events_received' => 1, 'fbtrace_id' => 'TR3'], 200)]);
+        ConversionActionMapping::query()->create([
+            'platform_integration_id' => $this->integration->getKey(),
+            'event' => 'purchase',
+            'external_action_id' => 'Purchase',
+            'active' => true,
+        ]);
+        $key = 'sh-purchase-event-id';
+
+        $this->postJson('/api/conversions', metaPayload($this->shop, [
+            'event' => 'purchase',
+            'value' => 99.9,
+            'currency' => 'USD',
+            'transaction_id' => 'ORDER-1001',
+            'idempotency_key' => $key,
+        ]))->assertOk();
+
+        Http::assertSent(function ($request): bool {
+            $event = $request->data()['data'][0];
+
+            return $event['event_name'] === 'Purchase'
+                && $event['event_id'] === 'sh-purchase-event-id'
+                && $event['custom_data'] === ['currency' => 'USD', 'value' => 99.9, 'order_id' => 'ORDER-1001'];
+        });
     });
 
     it('marks a 2xx without events_received as a partial failure with the reason', function (): void {

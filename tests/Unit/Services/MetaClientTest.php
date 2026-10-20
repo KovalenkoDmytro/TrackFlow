@@ -27,7 +27,7 @@ function makeTrackingEventData(array $overrides = []): TrackingEventData
         gaClientId: $overrides['gaClientId'] ?? null,
         ip: array_key_exists('ip', $overrides) ? $overrides['ip'] : '127.0.0.1',
         userAgent: $overrides['userAgent'] ?? 'Mozilla/5.0',
-        idempotencyKey: $overrides['idempotencyKey'] ?? 'idem-key-1',
+        idempotencyKey: array_key_exists('idempotencyKey', $overrides) ? $overrides['idempotencyKey'] : 'idem-key-1',
         occurredAt: $overrides['occurredAt'] ?? new DateTimeImmutable('2026-01-01T00:00:00+00:00'),
         eventSourceUrl: $overrides['eventSourceUrl'] ?? null,
     );
@@ -128,7 +128,7 @@ describe('MetaClient::uploadConversion', function (): void {
             $body = $request->data();
 
             return $body['data'][0]['event_name'] === 'Purchase'
-                && $body['data'][0]['event_id'] === 'order-123'
+                && $body['data'][0]['event_id'] === 'idem-key-1'
                 && $body['data'][0]['user_data']['fbp'] === 'fb.1.111.222'
                 && $body['data'][0]['action_source'] === 'website';
         });
@@ -189,12 +189,10 @@ describe('MetaClient::uploadConversion payload', function (): void {
         return $sent;
     }
 
-    it('sends event_source_url when available and omits it otherwise', function (): void {
+    it('sends the normalized event_source_url when available', function (): void {
         $with = sendMetaEvent(['eventSourceUrl' => 'https://store.test/products/x?utm=1#f']);
-        $without = sendMetaEvent([]);
 
-        expect($with['event_source_url'])->toBe('https://store.test/products/x')
-            ->and($without)->not->toHaveKey('event_source_url');
+        expect($with['event_source_url'])->toBe('https://store.test/products/x');
     });
 
     it('omits custom_data when a non-purchase event has no real value', function (): void {
@@ -216,13 +214,90 @@ describe('MetaClient::uploadConversion payload', function (): void {
     it('always sends value and currency for Purchase, even when the value is 0', function (): void {
         $event = sendMetaEvent(['value' => 0.0, 'currency' => 'CAD']);
 
+        expect($event['custom_data'])->toMatchArray(['currency' => 'CAD', 'value' => 0.0]);
+    });
+
+    it('sends the raw Shopify event.id as event_id for ViewContent', function (): void {
+        $key = 'sh-5aa205ea-3E48-4604-FD61-80406BBA03AB';
+        $event = sendMetaEvent(['event' => 'view_item', 'idempotencyKey' => $key, 'transactionId' => null], 'ViewContent');
+
+        expect($event['event_id'])->toBe($key);
+    });
+
+    it('sends the checkout_completed event.id, not the order id, as Purchase event_id and keeps order_id in custom_data', function (): void {
+        $key = 'sh-5aa205ea-3E48-4604-FD61-80406BBA03AB';
+        $event = sendMetaEvent(['idempotencyKey' => $key, 'transactionId' => 'gid://shopify/OrderIdentity/42', 'value' => 10.0, 'currency' => 'USD']);
+
+        expect($event['event_id'])->toBe($key)
+            ->and($event['custom_data'])->toBe(['currency' => 'USD', 'value' => 10.0, 'order_id' => 'gid://shopify/OrderIdentity/42']);
+    });
+
+    it('omits order_id for Purchase without a transaction id but keeps currency and value', function (): void {
+        $event = sendMetaEvent(['transactionId' => null, 'value' => 0.0, 'currency' => 'CAD']);
+
         expect($event['custom_data'])->toBe(['currency' => 'CAD', 'value' => 0.0]);
     });
 
-    it('does not change the event_id derivation', function (): void {
-        $event = sendMetaEvent(['transactionId' => null, 'event' => 'search'], 'Search');
+    it('does not add order_id to non-purchase events', function (): void {
+        $event = sendMetaEvent(['value' => 5.0, 'transactionId' => 'order-1'], 'AddToCart');
 
-        expect($event['event_id'])->toBe(md5('Search|2026-01-01T00:00:00+00:00|idem-key-1'));
+        expect($event['custom_data'])->toBe(['currency' => 'USD', 'value' => 5.0]);
+    });
+
+    it('falls back to the md5 scheme and logs a warning when the idempotency key is missing', function (): void {
+        Log::spy();
+
+        $event = sendMetaEvent(['transactionId' => null, 'event' => 'search', 'idempotencyKey' => null], 'Search');
+
+        expect($event['event_id'])->toBe(md5('Search|2026-01-01T00:00:00+00:00|'));
+        Log::shouldHaveReceived('warning')->once()->withArgs(
+            fn (string $m, array $c): bool => $m === 'meta.event_id_fallback' && $c === ['event' => 'Search', 'reason' => 'missing_idempotency_key'],
+        );
+    });
+
+    it('treats an empty-string idempotency key as missing and falls back', function (): void {
+        Log::spy();
+
+        $event = sendMetaEvent(['transactionId' => null, 'event' => 'search', 'idempotencyKey' => ''], 'Search');
+
+        expect($event['event_id'])->toBe(md5('Search|2026-01-01T00:00:00+00:00|'));
+        Log::shouldHaveReceived('warning')->once();
+    });
+
+    it('sends an unusually long idempotency key verbatim', function (): void {
+        $key = str_repeat('ab-é_', 60);
+        $event = sendMetaEvent(['idempotencyKey' => $key]);
+
+        expect($event['event_id'])->toBe($key);
+    });
+
+    it('falls back to the order id for Purchase when the idempotency key is missing', function (): void {
+        Log::spy();
+
+        $event = sendMetaEvent(['idempotencyKey' => null, 'transactionId' => 'order-123']);
+
+        expect($event['event_id'])->toBe('order-123');
+        Log::shouldHaveReceived('warning')->once();
+    });
+
+    it('falls back to the shop cart URL for view_cart and the shop root otherwise', function (): void {
+        $cart = sendMetaEvent(['event' => 'view_cart', 'shopDomain' => 'Example.myshopify.com'], 'ViewCart');
+        $other = sendMetaEvent(['event' => 'add_to_cart']);
+
+        expect($cart['event_source_url'])->toBe('https://example.myshopify.com/cart')
+            ->and($other['event_source_url'])->toBe('https://example.myshopify.com/');
+    });
+
+    it('prefers the pixel supplied event_source_url over the fallback', function (): void {
+        $event = sendMetaEvent(['event' => 'view_cart', 'eventSourceUrl' => 'https://store.test/products/x'], 'ViewCart');
+
+        expect($event['event_source_url'])->toBe('https://store.test/products/x');
+    });
+
+    it('omits event_source_url when the shop domain is not a clean host', function (): void {
+        $event = sendMetaEvent(['shopDomain' => 'evil.com/path?x=1']);
+
+        expect($event)->not->toHaveKey('event_source_url');
     });
 });
 
@@ -247,9 +322,9 @@ describe('MetaClient event_time clamp', function (): void {
         expect(sendMetaEvent(['occurredAt' => $past])['event_time'])->toBe($past->getTimestamp());
     });
 
-    it('keeps the dedup event_id identical regardless of now', function (): void {
+    it('keeps the event_id identical regardless of now', function (): void {
         $future = new DateTimeImmutable('2026-10-08 12:05:00+00:00');
-        $expected = md5('Search|2026-10-08T12:05:00+00:00|idem-key-1');
+        $expected = 'idem-key-1';
 
         $clamped = sendMetaEvent(['transactionId' => null, 'occurredAt' => $future], 'Search');
         Carbon::setTestNow(Carbon::parse('2026-10-08 13:00:00', 'UTC'));

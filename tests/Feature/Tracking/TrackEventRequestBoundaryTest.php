@@ -12,6 +12,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * @param  array<string, mixed>  $overrides
@@ -222,5 +223,135 @@ describe('value range validation', function (): void {
             ->assertJsonValidationErrors(['value']);
 
         expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('accepts null value and currency (event without a price) and stores 0 CAD', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, [
+            'event' => 'search',
+            'value' => null,
+            'currency' => null,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $event = TrackingEvent::query()->where('user_id', $this->shop->getKey())->firstOrFail();
+        expect((float) $event->value)->toBe(0.0)
+            ->and($event->currency)->toBe('CAD');
+    });
+
+    it('rejects a purchase with null value', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'value' => null]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['value']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('rejects a purchase with null currency', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'currency' => null]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['currency']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('rejects a purchase with value absent', function (): void {
+        $payload = conversionPayload($this->shop, ['event' => 'purchase']);
+        unset($payload['value']);
+
+        $this->postJson('/api/conversions', $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['value']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('rejects a purchase with currency absent', function (): void {
+        $payload = conversionPayload($this->shop, ['event' => 'purchase']);
+        unset($payload['currency']);
+
+        $this->postJson('/api/conversions', $payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['currency']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('accepts a non-purchase event with value and currency both absent', function (): void {
+        $payload = conversionPayload($this->shop, ['event' => 'search']);
+        unset($payload['value'], $payload['currency']);
+
+        $this->postJson('/api/conversions', $payload)
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $event = TrackingEvent::query()->where('user_id', $this->shop->getKey())->firstOrFail();
+        expect((float) $event->value)->toBe(0.0)
+            ->and($event->currency)->toBe('CAD');
+    });
+
+    it('accepts a free purchase with a zero value in any representation', function (mixed $zero): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'value' => $zero, 'currency' => 'USD']))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $event = TrackingEvent::query()->where('user_id', $this->shop->getKey())->firstOrFail();
+        expect((float) $event->value)->toBe(0.0)
+            ->and($event->currency)->toBe('USD');
+    })->with([
+        'int zero' => [0],
+        'float zero' => [0.0],
+        'string zero' => ['0'],
+    ]);
+
+    it('rejects a purchase with an empty-string value', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'value' => '']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['value']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('rejects a purchase with an empty-string currency', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'currency' => '']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['currency']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('rejects a purchase with a negative value', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'value' => -1]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['value']);
+
+        expect(TrackingEvent::query()->count())->toBe(0);
+    });
+
+    it('accepts a purchase with a valid value and currency', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['event' => 'purchase', 'value' => 42.5, 'currency' => 'USD']))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $event = TrackingEvent::query()->where('user_id', $this->shop->getKey())->firstOrFail();
+        expect((float) $event->value)->toBe(42.5)
+            ->and($event->currency)->toBe('USD');
+    });
+});
+
+describe('idempotency_key validation', function (): void {
+    beforeEach(function (): void {
+        $this->shop = User::factory()->create(['tracking_secret' => 'shop-tracking-secret']);
+    });
+
+    it('rejects an idempotency key longer than 255 characters', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['idempotency_key' => str_repeat('a', 256)]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['idempotency_key']);
+    });
+
+    it('accepts a normal sh-uuid idempotency key', function (): void {
+        $this->postJson('/api/conversions', conversionPayload($this->shop, ['idempotency_key' => 'sh-'.Str::uuid()]))
+            ->assertOk();
     });
 });
