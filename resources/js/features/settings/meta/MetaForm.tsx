@@ -20,6 +20,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMetaSettings } from './hooks/useMetaSettings';
+import { MetaSetupGuide } from './components/MetaSetupGuide';
 import { ValidationError } from '../../../types/api';
 import type { MetaFormData } from '../../../types/api';
 
@@ -115,6 +116,8 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
         </Alert>
       )}
 
+      <MetaSetupGuide connected={query.data?.integration?.active ?? false} />
+
       <Alert severity="warning" sx={{ mb: 3 }}>
         If you already have a Meta Pixel installed elsewhere for this store (for example, via
         Shopify&apos;s Facebook &amp; Instagram sales channel), connecting this integration may
@@ -135,7 +138,7 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
               label="Pixel ID"
               helperText={
                 form.formState.errors.pixel_id?.message ??
-                'Find this in Meta Events Manager → Data Sources → your pixel'
+                'Events Manager → Datasets → your dataset → the ID shown under its name'
               }
               error={!!form.formState.errors.pixel_id}
               fullWidth
@@ -154,7 +157,7 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
                 form.formState.errors.access_token?.message ??
                 (hasAccessToken
                   ? 'Already set — leave blank to keep the current value, or enter a new one to replace it.'
-                  : 'Events Manager → Datasets → Conversions API → Set up direct integration → Generate access token')
+                  : 'Events Manager → Integrations → Conversions API → Generate an Access Token (see the step-by-step guide above)')
               }
               error={!!form.formState.errors.access_token}
               fullWidth
