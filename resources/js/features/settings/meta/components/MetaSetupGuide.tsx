@@ -17,9 +17,9 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function MetaSetupGuide({ connected }: { connected: boolean }) {
+export function MetaSetupGuide() {
   return (
-    <Accordion defaultExpanded={!connected} disableGutters variant="outlined" sx={{ mb: 3 }}>
+    <Accordion disableGutters variant="outlined" sx={{ mb: 3 }}>
       <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="meta-setup-content" id="meta-setup-heading">
         <Box>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>How to find your Pixel ID and Access Token</Typography>

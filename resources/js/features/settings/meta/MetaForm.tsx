@@ -116,7 +116,7 @@ export function MetaForm({ onDisconnect, isDisconnecting }: MetaFormProps) {
         </Alert>
       )}
 
-      <MetaSetupGuide connected={query.data?.integration?.active ?? false} />
+      <MetaSetupGuide />
 
       <Alert severity="warning" sx={{ mb: 3 }}>
         If you already have a Meta Pixel installed elsewhere for this store (for example, via

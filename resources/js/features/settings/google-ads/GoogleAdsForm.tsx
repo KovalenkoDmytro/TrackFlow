@@ -129,7 +129,7 @@ export function GoogleAdsForm({ onDisconnect, isDisconnecting }: GoogleAdsFormPr
         customerId={credentials?.customer_id}
       />
 
-      <GoogleCloudSetupGuide connected={query.data?.integration?.active ?? false} />
+      <GoogleCloudSetupGuide />
 
       <Card variant="outlined">
         <CardContent>
