@@ -11,19 +11,31 @@ Artisan::command('inspire', function () {
 // Shopify expiring offline token migration — daily orphan detection/alerting.
 // The bulk migration itself (shopify:migrate-offline-tokens) is run manually
 // by an operator (canary rollout), not scheduled.
-Schedule::command('shopify:detect-orphaned-shops')->daily();
+Schedule::command('shopify:detect-orphaned-shops')
+    ->daily()
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
 
 // Keep raw tracking data for 90 days by default. Related platform deliveries
 // are removed automatically by the tracking_events foreign-key cascade.
 Schedule::command('tracking:prune')
     ->dailyAt('03:15')
-    ->withoutOverlapping(180);
+    ->withoutOverlapping(180)
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
 
 // Recent reports are refreshed for reporting delays; daily reconciliation also
 // matches retained events collected before a shop connected its Ads account.
-Schedule::command('google-ads:sync-clicks --days=3')->hourly()->withoutOverlapping(120);
-Schedule::command('google-ads:sync-clicks --days=90')->dailyAt('04:15')->withoutOverlapping(180);
+Schedule::command('google-ads:sync-clicks --days=3')
+    ->hourly()
+    ->withoutOverlapping(120)
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
+Schedule::command('google-ads:sync-clicks --days=90')
+    ->dailyAt('04:15')
+    ->withoutOverlapping(180)
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
 
 // Emails the owner about silent failures (stale sync, failed jobs, empty mappings,
 // stuck queue). Cannot detect a dead scheduler itself; see HEALTHCHECK_PING_URL.
-Schedule::command('health:check')->hourly()->withoutOverlapping(30);
+Schedule::command('health:check')
+    ->hourly()
+    ->withoutOverlapping(30)
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
