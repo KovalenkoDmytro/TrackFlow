@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Actions\GoogleAds\MarkGoogleAdsAccessRevoked;
 use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
@@ -65,8 +67,9 @@ final class BackfillGoogleAdsConversions extends Command
         $credentials = json_decode($integration->credentials, true);
         $counts = ['delivered' => 0, 'partial_failure' => 0, 'other_account' => 0, 'failed' => 0, 'no_mapping' => 0, PlatformDelivery::STATUS_EXPIRED => 0];
         $wouldUpload = 0;
+        $revoked = false;
 
-        $query->chunkById(50, function ($events) use ($client, $classifier, $window, $dryRun, $credentials, $integration, $mappings, &$counts, &$wouldUpload): void {
+        $query->chunkById(50, function ($events) use ($client, $classifier, $window, $dryRun, $credentials, $integration, $mappings, &$counts, &$wouldUpload, &$revoked): bool {
             foreach ($events as $event) {
                 $mapping = $mappings->get($event->event);
 
@@ -146,6 +149,13 @@ final class BackfillGoogleAdsConversions extends Command
                             $verdict['window_days'],
                         );
                     }
+                } catch (GoogleAdsAccessRevoked) {
+                    // Leave no delivery row so a later backfill can pick this event up again.
+                    $delivery->delete();
+                    MarkGoogleAdsAccessRevoked::run($integration, 'backfill');
+                    $revoked = true;
+
+                    return false;
                 } catch (\RuntimeException $exception) {
                     $delivery->update([
                         'status' => 'failed',
@@ -155,7 +165,15 @@ final class BackfillGoogleAdsConversions extends Command
                     $counts['failed']++;
                 }
             }
+
+            return true;
         }, 'id');
+
+        if ($revoked) {
+            $this->error('Google Ads access was revoked; integration deactivated. Reconnect it in settings, then run this command again.');
+
+            return self::FAILURE;
+        }
 
         if ($dryRun) {
             $this->info("Dry run: would upload {$wouldUpload}, would mark expired {$counts[PlatformDelivery::STATUS_EXPIRED]}, no mapping {$counts['no_mapping']}.");

@@ -159,6 +159,9 @@ final class GoogleAdsApiController extends Controller
             ],
             [
                 'active' => true,
+                // A fresh, tested connection clears a previous "access revoked" state.
+                'last_error' => null,
+                'last_error_at' => null,
                 'credentials' => json_encode($credentials),
                 'settings' => [],
             ],

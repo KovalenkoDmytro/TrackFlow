@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Actions\Tracking;
 
+use App\Actions\GoogleAds\MarkGoogleAdsAccessRevoked;
 use App\Contracts\PlatformResolverContract;
 use App\Contracts\ReportsDeliveryReceipt;
 use App\Contracts\ReportsPartialFailure;
 use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
@@ -276,6 +278,12 @@ final class ProcessTrackingEvent
                 'event' => $data->event,
                 'success' => $success,
             ]);
+        } catch (GoogleAdsAccessRevoked) {
+            // Access was revoked by the client: retrying cannot help. The delivery row is removed
+            // (not left as 'failed') so `google-ads:backfill` can upload this event after reconnect,
+            // and nothing is re-thrown, so the queue neither retries nor reports it.
+            $delivery->delete();
+            MarkGoogleAdsAccessRevoked::run($integration, 'upload');
         } catch (\Throwable $e) {
             $message = SecretRedactor::redact($e->getMessage());
 

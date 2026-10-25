@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Actions\GoogleAds\MarkGoogleAdsAccessRevoked;
 use App\Enums\Platform;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Exceptions\GoogleAds\SyncAlreadyRunning;
 use App\Models\PlatformIntegration;
 use App\Services\GoogleAdsClickSync;
@@ -44,6 +46,11 @@ final class SyncGoogleAdsClicks extends Command
                 // worker died mid-run without releasing it.
                 Log::warning("google-ads:sync-clicks: sync already running for integration {$integration->id}, skipping.");
                 $this->comment("Integration {$integration->id}: sync already running, skipping.");
+            } catch (GoogleAdsAccessRevoked) {
+                // Client/agency removed our access: not a command failure and not the owner's
+                // problem. The integration is deactivated until it is reconnected in settings.
+                MarkGoogleAdsAccessRevoked::run($integration, 'sync-clicks');
+                $this->comment("Integration {$integration->id}: Google Ads access revoked, integration deactivated until reconnected.");
             } catch (\Throwable $e) {
                 Log::error('google-ads:sync-clicks failed', [
                     'integration' => $integration->getKey(),

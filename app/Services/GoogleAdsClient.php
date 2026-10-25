@@ -8,6 +8,7 @@ use App\Contracts\ConversionPlatformContract;
 use App\Contracts\ReportsPartialFailure;
 use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformIntegration;
 use Carbon\CarbonImmutable;
@@ -318,6 +319,7 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
         if (! $response->successful()) {
             $status = $response->status();
             $errorMessage = $this->extractApiError($response->json(), $response->body());
+            $this->throwIfAccessRevoked($status, $response->json(), $errorMessage);
             throw new \RuntimeException("Failed to upload click conversion [{$status}]: {$errorMessage}");
         }
 
@@ -408,6 +410,8 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
                 $reason = str_replace($accessToken, '[redacted]', $reason);
                 $reason = (string) preg_replace('/Bearer\s+\S+/i', 'Bearer [redacted]', $reason);
 
+                $this->throwIfAccessRevoked($response->status(), $response->json(), $reason);
+
                 throw new \RuntimeException("Google Ads report failed [{$response->status()}]: ".substr($reason, 0, 500));
             }
             $payload = $response->json();
@@ -425,6 +429,32 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
         } while ($pageToken);
 
         return $rows;
+    }
+
+    /**
+     * Raise GoogleAdsAccessRevoked for HTTP 403 carrying authorizationError USER_PERMISSION_DENIED.
+     *
+     * Only this exact code counts. Our own misconfiguration surfaces under other codes
+     * (CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION, DEVELOPER_TOKEN_*, ACTION_NOT_PERMITTED,
+     * CUSTOMER_NOT_ENABLED) and a bare 403 without that code stays a normal failure.
+     * A missing login-customer-id also produces USER_PERMISSION_DENIED; Google does not
+     * distinguish the two cases in the code.
+     *
+     * @param  mixed  $body  Decoded JSON response body.
+     */
+    private function throwIfAccessRevoked(int $status, mixed $body, string $message): void
+    {
+        if ($status !== 403 || ! is_array($body) || ! is_array($body['error'] ?? null)) {
+            return;
+        }
+
+        foreach ($body['error']['details'] ?? [] as $detail) {
+            foreach (is_array($detail) ? ($detail['errors'] ?? []) : [] as $adsError) {
+                if (($adsError['errorCode']['authorizationError'] ?? null) === 'USER_PERMISSION_DENIED') {
+                    throw new GoogleAdsAccessRevoked("Google Ads access denied [403 USER_PERMISSION_DENIED]: {$message}");
+                }
+            }
+        }
     }
 
     /**
