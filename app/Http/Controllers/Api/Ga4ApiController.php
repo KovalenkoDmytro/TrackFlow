@@ -9,6 +9,7 @@ use App\Enums\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\PlatformIntegration;
 use App\Services\GoogleAnalytics4Client;
+use App\Support\SecretRedactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -133,7 +134,7 @@ final class Ga4ApiController extends Controller
             app(GoogleAnalytics4Client::class)->testCredentials($credentials);
         } catch (\RuntimeException $e) {
             return response()->json([
-                'message' => 'Could not connect to GA4: '.$e->getMessage(),
+                'message' => 'Could not connect to GA4: '.SecretRedactor::redact($e->getMessage()),
             ], 422);
         }
 

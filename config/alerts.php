@@ -32,6 +32,11 @@ return [
     // Oldest pending queued job older than this many minutes means the worker is likely down.
     'queue_backlog_max_age_minutes' => (int) env('ALERT_QUEUE_BACKLOG_MAX_AGE_MINUTES', 15),
 
+    // platform_deliveries still `queued` and untouched for this many minutes (any platform) mean the
+    // job died mid-attempt. The retry chain takes ~7 min, so 60 leaves wide margin. Alerts at >= min count.
+    'stuck_delivery_max_age_minutes' => (int) env('ALERT_STUCK_DELIVERY_MAX_AGE_MINUTES', 60),
+    'stuck_delivery_min_count' => (int) env('ALERT_STUCK_DELIVERY_MIN_COUNT', 1),
+
     // Plain-language hints for delivery rejection codes, shown in the dead-integration alert.
     // `alert` false marks normal data conditions (old/fresh/duplicate events): they only
     // alert when EVERY delivery in the window has such a code and is never worth reconnecting for.
@@ -42,6 +47,7 @@ return [
         'TOO_RECENT_CONVERSION_ACTION' => ['alert' => true, 'hint' => 'the conversion action was created very recently; this is temporary and should clear within about 6 hours.'],
         'EXPIRED_EVENT' => ['alert' => false, 'hint' => 'the click is older than the allowed upload window (normal for late events).'],
         'TOO_RECENT_EVENT' => ['alert' => false, 'hint' => 'the click is too recent for Google to process (normal, self-resolving).'],
+        'LATER_THAN_MAXIMUM_DATE' => ['alert' => false, 'hint' => "Event time was ahead of Google's clock (typically the shopper's browser clock running fast). Newer uploads clamp the time, so this should not recur."],
         'CLICK_CONVERSION_ALREADY_EXISTS' => ['alert' => false, 'hint' => 'this conversion was already uploaded (duplicate).'],
         'ORDER_ID_ALREADY_IN_USE' => ['alert' => false, 'hint' => 'this order id was already used for an upload (duplicate).'],
     ],

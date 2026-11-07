@@ -17,9 +17,9 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function GoogleCloudSetupGuide({ connected }: { connected: boolean }) {
+export function GoogleCloudSetupGuide() {
   return (
-    <Accordion defaultExpanded={!connected} disableGutters variant="outlined" sx={{ mb: 3 }}>
+    <Accordion disableGutters variant="outlined" sx={{ mb: 3 }}>
       <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="google-cloud-setup-content" id="google-cloud-setup-heading">
         <Box>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>How to connect Google Ads — step-by-step setup</Typography>

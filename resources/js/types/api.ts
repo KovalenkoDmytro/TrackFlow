@@ -27,6 +27,7 @@ export interface AnalyticsParams {
 
 export interface EventCount {
   unverified?: number;
+  unique_clicks?: number;
   event: string;
   label: string;
   count: number;
@@ -39,7 +40,12 @@ export interface AnalyticsPeriod {
 
 export interface AnalyticsSummary {
   unverified_total?: number;
-  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number; clicks_from_other_account?: boolean };
+  unique_clicks_total?: number;
+  attribution?: { connected: boolean; customer_id: string | null; last_checked_at: string | null; checked_days: number };
+  /** Present for the Google Ads platform: per-event delivery outcomes. */
+  delivery_stats?: PlatformDeliveryStat[];
+  totals?: PlatformDeliveryTotals;
+  integration?: PlatformIntegrationState;
   counts: EventCount[];
   total: number;
   period: AnalyticsPeriod | null;
@@ -65,7 +71,13 @@ export interface PlatformDeliveryStat {
   delivered: number;
   failed: number;
   pending: number;
+  /** Google Ads only: click belongs to a Google Ads account that is not connected (not a failure). */
+  other_account: number;
+  /** Google Ads only: click older than the conversion window (not a failure). */
+  expired: number;
   last_error: string | null;
+  /** Which kind of row last_error came from: 'expired' is informational, not a failure. */
+  last_error_status?: 'failed' | 'expired' | null;
 }
 
 export interface PlatformDeliveryTotals {
@@ -73,6 +85,8 @@ export interface PlatformDeliveryTotals {
   delivered: number;
   failed: number;
   pending: number;
+  other_account: number;
+  expired: number;
 }
 
 export interface PlatformIntegrationState {
@@ -109,7 +123,7 @@ export interface GoogleAdsCredentials {
 
 export interface GoogleAdsIntegration {
   active: boolean;
-  clicks_from_other_account?: boolean;
+  other_account_share?: { attempted: number; other_account: number };
 }
 
 export interface GoogleAdsMapping {

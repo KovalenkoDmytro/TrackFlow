@@ -126,6 +126,12 @@ register(({ analytics, browser, settings, init }) => {
     const attribution = await enqueueAttribution(href);
     const eventSourceUrl = sourceUrl(href);
 
+    // Meta dedup relies on event.id being forwarded verbatim; a random key still keeps
+    // internal idempotency but cannot deduplicate against Shopify's own Meta pixel.
+    if (!event?.id) {
+      console.warn("TrackFlow: Shopify event.id missing for " + eventName + "; using a random idempotency key");
+    }
+
     const body = {
       shop_domain: SHOP_DOMAIN,
       tracking_secret: TRACKING_SECRET,

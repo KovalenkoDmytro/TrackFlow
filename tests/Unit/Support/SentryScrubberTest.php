@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Support\SentryScrubber;
 use Sentry\Breadcrumb;
 use Sentry\Event;
+use Sentry\ExceptionDataBag;
+use Sentry\ExceptionMechanism;
 
 it('removes sensitive headers, conversion bodies and secret-like keys', function (): void {
     $event = Event::createEvent();
@@ -34,4 +36,16 @@ it('boots with an empty sentry dsn and scrubber wired in', function (): void {
         ->and(config('sentry.traces_sample_rate'))->toBe(0.0)
         ->and(config('sentry.before_send'))->toBe([SentryScrubber::class, 'scrub']);
     $this->get('/up')->assertOk();
+});
+
+it('redacts api_secret from exception messages and breadcrumb urls', function (): void {
+    $event = Event::createEvent();
+    $event->setExceptions([new ExceptionDataBag(new RuntimeException('x'), null, new ExceptionMechanism(ExceptionMechanism::TYPE_GENERIC, true))]);
+    $event->getExceptions()[0]->setValue('fail for https://g.test/mp/collect?api_secret=TOPSECRET&x=1');
+    $event->setBreadcrumb([new Breadcrumb(Breadcrumb::LEVEL_INFO, Breadcrumb::TYPE_HTTP, 'http', 'm', ['http.url' => 'https://g.test/c?api_secret=TOPSECRET'])]);
+
+    $event = SentryScrubber::scrub($event);
+
+    expect($event->getExceptions()[0]->getValue())->toBe('fail for https://g.test/mp/collect?api_secret=[redacted]&x=1')
+        ->and($event->getBreadcrumbs()[0]->getMetadata()['http.url'])->toBe('https://g.test/c?api_secret=[redacted]');
 });

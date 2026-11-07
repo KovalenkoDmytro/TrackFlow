@@ -236,6 +236,68 @@ it('does not email for foreign clicks when older rows have no recorded reason', 
     Mail::assertNothingSent();
 });
 
+it('ignores other_account rows in the dead integration check and in its reasons', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, array_fill(0, 10, 'INVALID_CUSTOMER_FOR_CLICK'));
+    PlatformDelivery::query()->update(['status' => 'other_account']);
+
+    // Every row belongs to another account: nothing to alert about, even without click-sync evidence.
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // Remaining rows below the minimum do not alert either...
+    deadRows($integration, array_fill(0, 9, 'INVALID_CONVERSION_ACTION'));
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // ...but once the non-other_account rows reach the minimum with 0 delivered, it alerts and the reasons exclude other_account.
+    deadRows($integration, ['INVALID_CONVERSION_ACTION']);
+    $this->artisan('health:check')->assertFailed();
+    Mail::assertSent(HealthAlertMail::class, fn (HealthAlertMail $m) => str_contains($m->problems[0], '10 deliveries in 24h, none delivered')
+        && str_contains($m->problems[0], 'Top reason: INVALID_CONVERSION_ACTION (10)')
+        && ! str_contains($m->problems[0], 'Other reasons'));
+});
+
+it('excludes expired rows from the delivery failure percentage', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    $make = fn (string $status, int $n) => collect(range(1, $n))->each(fn () => PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => 'google_ads', 'status' => $status, 'attempts' => 3,
+    ]));
+    DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->toDateString(), 'checked_at' => now()->subHour(),
+    ]);
+
+    $make('failed', 5);
+    $make('expired', 20);
+    $make('delivered', 1);
+
+    // 5 failed of 6 counted rows (expired excluded) = 83%; with expired in the total it would be 19% and pass.
+    $this->artisan('health:check --no-mail')->assertFailed();
+    // Expired alone never counts as a failure.
+    PlatformDelivery::query()->where('status', 'failed')->delete();
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+});
+
+it('ignores expired rows in the dead integration check and in its reasons', function (): void {
+    $integration = healthIntegration(Platform::GoogleAds);
+    deadRows($integration, array_fill(0, 10, 'EXPIRED_EVENT'));
+    PlatformDelivery::query()->update(['status' => 'expired']);
+
+    // Only expired rows: nothing to alert about.
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    // Expired rows do not count towards the minimum either.
+    deadRows($integration, array_fill(0, 9, 'INVALID_CONVERSION_ACTION'));
+    $this->artisan('health:check --no-mail')->assertSuccessful();
+
+    deadRows($integration, ['INVALID_CONVERSION_ACTION']);
+    $this->artisan('health:check')->assertFailed();
+    Mail::assertSent(HealthAlertMail::class, fn (HealthAlertMail $m) => str_contains($m->problems[0], '10 deliveries in 24h, none delivered')
+        && str_contains($m->problems[0], 'Top reason: INVALID_CONVERSION_ACTION (10)')
+        && ! str_contains($m->problems[0], 'EXPIRED_EVENT'));
+});
+
 it('does not alert when every undelivered row is a normal data condition', function (): void {
     $integration = healthIntegration(Platform::GoogleAds);
     deadRows($integration, [...array_fill(0, 9, 'EXPIRED_EVENT'), 'TOO_RECENT_EVENT']);
@@ -345,4 +407,109 @@ it('pings the monitor url only after a healthy run', function (): void {
     $integration->conversionActionMappings()->delete();
     $this->artisan('health:check --no-mail')->assertFailed();
     Http::assertSentCount(1);
+});
+
+function queuedDelivery(PlatformIntegration $integration, string $status = 'queued', int $minutesOld = 120): PlatformDelivery
+{
+    $event = TrackingEvent::factory()->create(['user_id' => $integration->user_id]);
+    $delivery = PlatformDelivery::query()->create([
+        'tracking_event_id' => $event->getKey(), 'platform_integration_id' => $integration->getKey(),
+        'platform' => $integration->platform->value, 'status' => $status, 'attempts' => 1,
+    ]);
+    // Bypass automatic timestamps so the row really looks untouched for $minutesOld.
+    DB::table('platform_deliveries')->where('id', $delivery->getKey())->update(['updated_at' => now()->subMinutes($minutesOld)]);
+
+    return $delivery;
+}
+
+function freshGoogleSync(PlatformIntegration $integration): void
+{
+    DB::table('google_ads_click_syncs')->insert([
+        'platform_integration_id' => $integration->getKey(), 'customer_id' => '1234567890',
+        'click_date' => now()->toDateString(), 'checked_at' => now()->subHour(),
+    ]);
+}
+
+describe('stuck queued deliveries', function (): void {
+    it('is silent without queued rows', function (): void {
+        healthIntegration();
+
+        $this->artisan('health:check')->assertSuccessful();
+
+        Mail::assertNothingSent();
+    });
+
+    it('ignores a queued row inside the threshold', function (): void {
+        queuedDelivery(healthIntegration(), minutesOld: 59);
+
+        $this->artisan('health:check')->assertSuccessful();
+
+        Mail::assertNothingSent();
+    });
+
+    it('ignores other statuses however old', function (): void {
+        $integration = healthIntegration();
+        foreach (['delivered', 'failed', 'partial_failure', 'other_account'] as $status) {
+            queuedDelivery($integration, $status, 600);
+        }
+
+        $this->artisan('health:check --no-mail')->assertSuccessful();
+    });
+
+    it('alerts with counts, platform breakdown, oldest time and ids across platforms', function (): void {
+        $google = healthIntegration(Platform::GoogleAds);
+        freshGoogleSync($google);
+        $meta = healthIntegration(Platform::Meta);
+        queuedDelivery($google, minutesOld: 120);
+        queuedDelivery($google, minutesOld: 300);
+        queuedDelivery($meta, minutesOld: 90);
+        queuedDelivery($meta, 'delivered', 900);
+        $oldest = now()->subMinutes(300)->toDateTimeString();
+
+        $this->artisan('health:check')->assertFailed();
+
+        Mail::assertSent(HealthAlertMail::class, function (HealthAlertMail $m) use ($google, $meta, $oldest): bool {
+            $text = $m->render();
+
+            return count($m->problems) === 1
+                && str_contains($m->problems[0], "3 platform deliveries stuck in 'queued' for over 60 min")
+                && str_contains($m->problems[0], 'google_ads 2, meta 1')
+                && str_contains($m->problems[0], "oldest last updated {$oldest}")
+                && str_contains($m->problems[0], 'Integrations: '.$google->getKey().', '.$meta->getKey())
+                && str_contains($m->problems[0], 'users: '.$google->user_id.', '.$meta->user_id)
+                && str_contains($m->problems[0], 'Inspect with:')
+                && str_contains($text, '3 platform deliveries stuck');
+        });
+    });
+
+    it('respects the configured threshold', function (): void {
+        $integration = healthIntegration();
+        queuedDelivery($integration, minutesOld: 120);
+
+        config()->set('alerts.stuck_delivery_max_age_minutes', 180);
+        $this->artisan('health:check --no-mail')->assertSuccessful();
+
+        config()->set('alerts.stuck_delivery_max_age_minutes', 100);
+        $this->artisan('health:check --no-mail')->assertFailed();
+    });
+
+    it('respects the configured minimum count', function (): void {
+        $integration = healthIntegration();
+        queuedDelivery($integration);
+        config()->set('alerts.stuck_delivery_min_count', 2);
+
+        $this->artisan('health:check --no-mail')->assertSuccessful();
+
+        queuedDelivery($integration);
+        $this->artisan('health:check --no-mail')->assertFailed();
+    });
+
+    it('does not email again for the same stuck rows within the throttle window', function (): void {
+        queuedDelivery(healthIntegration());
+
+        $this->artisan('health:check')->assertFailed();
+        $this->artisan('health:check')->assertFailed();
+
+        Mail::assertSent(HealthAlertMail::class, 1);
+    });
 });

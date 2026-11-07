@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Actions\GoogleAds\MarkGoogleAdsAccessRevoked;
+use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Services\GoogleAdsClient;
+use App\Services\GoogleAdsConversionWindow;
+use App\Services\GoogleAdsOtherAccountClassifier;
 use Illuminate\Console\Command;
 
 final class BackfillGoogleAdsConversions extends Command
@@ -18,11 +23,11 @@ final class BackfillGoogleAdsConversions extends Command
         {integration : Platform integration ID}
         {--from= : Inclusive occurred_at timestamp}
         {--to= : Inclusive occurred_at timestamp}
-        {--dry-run : Count eligible events without sending them}';
+        {--dry-run : Count would-upload and would-expire events without sending or writing anything}';
 
     protected $description = 'Upload previously unattempted GCLID events to a Google Ads integration';
 
-    public function handle(GoogleAdsClient $client): int
+    public function handle(GoogleAdsClient $client, GoogleAdsOtherAccountClassifier $classifier, GoogleAdsConversionWindow $window): int
     {
         $integration = PlatformIntegration::query()
             ->with(['user', 'conversionActionMappings'])
@@ -51,22 +56,33 @@ final class BackfillGoogleAdsConversions extends Command
         $eligible = (clone $query)->count();
         $this->info("Eligible events: {$eligible}");
 
-        if ($this->option('dry-run') || $eligible === 0) {
+        if ($eligible === 0) {
             return self::SUCCESS;
         }
 
+        $dryRun = (bool) $this->option('dry-run');
         $mappings = $integration->conversionActionMappings
             ->where('active', true)
             ->keyBy('event');
         $credentials = json_decode($integration->credentials, true);
-        $counts = ['delivered' => 0, 'partial_failure' => 0, 'failed' => 0, 'no_mapping' => 0];
+        $counts = ['delivered' => 0, 'partial_failure' => 0, 'other_account' => 0, 'failed' => 0, 'no_mapping' => 0, PlatformDelivery::STATUS_EXPIRED => 0];
+        $wouldUpload = 0;
+        $revoked = false;
 
-        $query->chunkById(50, function ($events) use ($client, $credentials, $integration, $mappings, &$counts): void {
+        $query->chunkById(50, function ($events) use ($client, $classifier, $window, $dryRun, $credentials, $integration, $mappings, &$counts, &$wouldUpload, &$revoked): bool {
             foreach ($events as $event) {
                 $mapping = $mappings->get($event->event);
 
                 if ($mapping === null) {
                     $counts['no_mapping']++;
+
+                    continue;
+                }
+
+                $verdict = $window->evaluate($integration, $event, $mapping);
+
+                if ($dryRun) {
+                    $verdict['eligible'] ? $wouldUpload++ : $counts[PlatformDelivery::STATUS_EXPIRED]++;
 
                     continue;
                 }
@@ -78,19 +94,68 @@ final class BackfillGoogleAdsConversions extends Command
                     'status' => 'queued',
                 ]);
 
+                if ($classifier->isOwnershipKnown($integration, $event)) {
+                    $delivery->update([
+                        'status' => GoogleAdsOtherAccountClassifier::STATUS,
+                        'response_body' => $classifier->skippedBody($classifier->customerId($integration)),
+                    ]);
+                    $counts[GoogleAdsOtherAccountClassifier::STATUS]++;
+
+                    continue;
+                }
+
+                // Outside the conversion window Google would answer EXPIRED_EVENT: record it
+                // locally so the event is never selected again and no upload is made.
+                if (! $verdict['eligible']) {
+                    $window->markSkipped($delivery, 'backfill', $integration, $event, $verdict['age_days'], $verdict['window_days']);
+                    $counts[PlatformDelivery::STATUS_EXPIRED]++;
+
+                    continue;
+                }
+
                 try {
                     $success = $client->uploadConversion(
                         $credentials,
                         $this->toData($event, $integration->user->name),
                         $mapping,
                     );
-                    $status = $success ? 'delivered' : 'partial_failure';
+                    $failure = $success ? null : $client->partialFailure();
+                    $status = match (true) {
+                        $success => 'delivered',
+                        $classifier->isOtherAccountFailure($integration, $event, $failure) => GoogleAdsOtherAccountClassifier::STATUS,
+                        $failure?->primaryCode() === GoogleAdsConversionWindow::GOOGLE_CODE => PlatformDelivery::STATUS_EXPIRED,
+                        default => 'partial_failure',
+                    };
                     $delivery->update([
                         'status' => $status,
                         'attempts' => 1,
                         'sent_at' => now(),
+                        ...($failure instanceof PartialFailure ? [
+                            'response_code' => $failure->httpStatus,
+                            'response_body' => $status === GoogleAdsOtherAccountClassifier::STATUS
+                                ? $classifier->body($failure, $classifier->customerId($integration))
+                                : $failure->toJson(),
+                        ] : []),
                     ]);
                     $counts[$status]++;
+
+                    if ($status === PlatformDelivery::STATUS_EXPIRED) {
+                        $window->log(
+                            'google_ads.conversion_expired',
+                            'google_response',
+                            $integration,
+                            $event,
+                            $verdict['age_days'],
+                            $verdict['window_days'],
+                        );
+                    }
+                } catch (GoogleAdsAccessRevoked) {
+                    // Leave no delivery row so a later backfill can pick this event up again.
+                    $delivery->delete();
+                    MarkGoogleAdsAccessRevoked::run($integration, 'backfill');
+                    $revoked = true;
+
+                    return false;
                 } catch (\RuntimeException $exception) {
                     $delivery->update([
                         'status' => 'failed',
@@ -100,7 +165,21 @@ final class BackfillGoogleAdsConversions extends Command
                     $counts['failed']++;
                 }
             }
+
+            return true;
         }, 'id');
+
+        if ($revoked) {
+            $this->error('Google Ads access was revoked; integration deactivated. Reconnect it in settings, then run this command again.');
+
+            return self::FAILURE;
+        }
+
+        if ($dryRun) {
+            $this->info("Dry run: would upload {$wouldUpload}, would mark expired {$counts[PlatformDelivery::STATUS_EXPIRED]}, no mapping {$counts['no_mapping']}.");
+
+            return self::SUCCESS;
+        }
 
         $this->table(
             ['Status', 'Count'],

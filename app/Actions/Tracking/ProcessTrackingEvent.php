@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Actions\Tracking;
 
+use App\Actions\GoogleAds\MarkGoogleAdsAccessRevoked;
 use App\Contracts\PlatformResolverContract;
 use App\Contracts\ReportsDeliveryReceipt;
 use App\Contracts\ReportsPartialFailure;
 use App\Data\PartialFailure;
 use App\Data\TrackingEventData;
 use App\Enums\Platform;
+use App\Exceptions\GoogleAds\GoogleAdsAccessRevoked;
 use App\Models\ConversionActionMapping;
 use App\Models\PlatformDelivery;
 use App\Models\PlatformIntegration;
 use App\Models\TrackingEvent;
 use App\Models\User;
+use App\Services\GoogleAdsConversionWindow;
+use App\Services\GoogleAdsOtherAccountClassifier;
+use App\Support\SecretRedactor;
 use Illuminate\Support\Facades\Log;
 use Lorisleiva\Actions\Concerns\AsJob;
 use Lorisleiva\Actions\Concerns\AsObject;
@@ -42,7 +47,11 @@ final class ProcessTrackingEvent
 
     public int $timeout = 60;
 
-    public function __construct(private readonly PlatformResolverContract $resolver) {}
+    public function __construct(
+        private readonly PlatformResolverContract $resolver,
+        private readonly GoogleAdsOtherAccountClassifier $classifier,
+        private readonly GoogleAdsConversionWindow $window,
+    ) {}
 
     /**
      * Dispatch the event to all active platform integrations for the shop.
@@ -101,7 +110,7 @@ final class ProcessTrackingEvent
      * on every attempt.
      *
      * Retry-safe: an existing delivery row for this event + integration in a terminal
-     * status (delivered / partial_failure) is skipped, and a "queued"/"failed" row left by
+     * status (delivered / partial_failure / other_account / expired) is skipped, and a "queued"/"failed" row left by
      * an earlier attempt is reused instead of inserting a duplicate.
      */
     private function processIntegration(
@@ -145,7 +154,7 @@ final class ProcessTrackingEvent
             ->latest('id')
             ->first();
 
-        if ($delivery instanceof PlatformDelivery && in_array($delivery->status, ['delivered', 'partial_failure'], true)) {
+        if ($delivery instanceof PlatformDelivery && in_array($delivery->status, ['delivered', 'partial_failure', GoogleAdsOtherAccountClassifier::STATUS, PlatformDelivery::STATUS_EXPIRED], true)) {
             return;
         }
 
@@ -163,6 +172,28 @@ final class ProcessTrackingEvent
 
         $credentials = json_decode($integration->credentials, true);
 
+        // Ownership of this click was already established for the connected account: Google
+        // would reject it again, so record the outcome without calling the API.
+        if ($integration->platform === Platform::GoogleAds && $this->classifier->isOwnershipKnown($integration, $trackingEvent)) {
+            $this->recordSkipped($integration, $delivery, $trackingEvent);
+
+            return;
+        }
+
+        $verdict = null;
+
+        // Google would reject a click older than the conversion window with EXPIRED_EVENT:
+        // record it as expired locally instead of uploading.
+        if ($integration->platform === Platform::GoogleAds) {
+            $verdict = $this->window->evaluate($integration, $trackingEvent, $mapping);
+
+            if (! $verdict['eligible']) {
+                $this->window->markSkipped($delivery, 'live', $integration, $trackingEvent, $verdict['age_days'], $verdict['window_days']);
+
+                return;
+            }
+        }
+
         try {
             $platform = $this->resolver->resolve($integration->platform);
             // Recover a click id lost after the landing page, for the Meta payload only.
@@ -174,20 +205,56 @@ final class ProcessTrackingEvent
             $failure = ! $success && $platform instanceof ReportsPartialFailure ? $platform->partialFailure() : null;
             $receipt = $success && $platform instanceof ReportsDeliveryReceipt ? $platform->deliveryReceipt() : null;
 
+            $otherAccount = $failure instanceof PartialFailure
+                && $integration->platform === Platform::GoogleAds
+                && $this->classifier->isOtherAccountFailure($integration, $trackingEvent, $failure);
+
+            // Precedence stays: other_account first, then expired, then a regular partial failure.
+            $expired = ! $otherAccount
+                && $failure instanceof PartialFailure
+                && $integration->platform === Platform::GoogleAds
+                && $failure->primaryCode() === GoogleAdsConversionWindow::GOOGLE_CODE;
+
             $delivery->update([
-                'status' => $success ? 'delivered' : 'partial_failure',
+                'status' => match (true) {
+                    $success => 'delivered',
+                    $otherAccount => GoogleAdsOtherAccountClassifier::STATUS,
+                    $expired => PlatformDelivery::STATUS_EXPIRED,
+                    default => 'partial_failure',
+                },
                 'attempts' => $delivery->attempts + 1,
                 'sent_at' => now(),
                 ...($failure instanceof PartialFailure ? [
                     'response_code' => $failure->httpStatus,
-                    'response_body' => $failure->toJson(),
+                    'response_body' => $otherAccount
+                        ? $this->classifier->body($failure, $this->classifier->customerId($integration))
+                        : $failure->toJson(),
                 ] : []),
                 ...($receipt !== null ? ['response_code' => 200, 'response_body' => $receipt] : []),
             ]);
 
             $integration->last_success_at = $success ? now() : $integration->last_success_at;
 
-            if (! $success) {
+            if ($otherAccount) {
+                // Not a delivery failure: the click belongs to an unconnected account, so the
+                // integration's last_error is left alone.
+                Log::info('ProcessTrackingEvent: click belongs to another Google Ads account', [
+                    'integration_id' => $integration->getKey(),
+                    'tracking_event_id' => $trackingEvent->getKey(),
+                    'shop' => $data->shopDomain,
+                    'customer_id' => $this->classifier->customerId($integration),
+                ]);
+            } elseif ($expired) {
+                // Normal data condition (late event), not an integration problem: last_error is left alone.
+                $this->window->log(
+                    'google_ads.conversion_expired',
+                    'google_response',
+                    $integration,
+                    $trackingEvent,
+                    $verdict['age_days'] ?? $this->window->ageDays($trackingEvent),
+                    $verdict['window_days'] ?? $this->window->defaultWindowDays(),
+                );
+            } elseif (! $success) {
                 $integration->last_error = $failure instanceof PartialFailure ? $failure->lastError() : 'partial_failure';
                 $integration->last_error_at = now();
 
@@ -211,24 +278,49 @@ final class ProcessTrackingEvent
                 'event' => $data->event,
                 'success' => $success,
             ]);
+        } catch (GoogleAdsAccessRevoked) {
+            // Access was revoked by the client: retrying cannot help. The delivery row is removed
+            // (not left as 'failed') so `google-ads:backfill` can upload this event after reconnect,
+            // and nothing is re-thrown, so the queue neither retries nor reports it.
+            $delivery->delete();
+            MarkGoogleAdsAccessRevoked::run($integration, 'upload');
         } catch (\Throwable $e) {
+            $message = SecretRedactor::redact($e->getMessage());
+
             $delivery->update([
                 'status' => 'failed',
                 'attempts' => $delivery->attempts + 1,
-                'response_body' => $e->getMessage(),
+                'response_body' => $message,
             ]);
 
-            $integration->last_error = $e->getMessage();
+            // platform_integrations.last_error is varchar(255): an unbounded write would throw.
+            $integration->last_error = SecretRedactor::bounded($message);
             $integration->last_error_at = now();
             $integration->save();
 
             Log::error('ProcessTrackingEvent: failed', [
                 'platform' => $integration->platform->value,
                 'event' => $data->event,
-                'error' => $e->getMessage(),
+                'error' => $message,
             ]);
 
             throw $e;
         }
+    }
+
+    private function recordSkipped(PlatformIntegration $integration, PlatformDelivery $delivery, TrackingEvent $trackingEvent): void
+    {
+        $customerId = $this->classifier->customerId($integration);
+
+        $delivery->update([
+            'status' => GoogleAdsOtherAccountClassifier::STATUS,
+            'response_body' => $this->classifier->skippedBody($customerId),
+        ]);
+
+        Log::info('ProcessTrackingEvent: upload skipped, click owner already known to be another Google Ads account', [
+            'integration_id' => $integration->getKey(),
+            'tracking_event_id' => $trackingEvent->getKey(),
+            'customer_id' => $customerId,
+        ]);
     }
 }

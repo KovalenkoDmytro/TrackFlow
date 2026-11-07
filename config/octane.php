@@ -114,7 +114,7 @@ return [
         ],
     ],
 
-    'warm' => [],
+    'warm' => [...Octane::defaultServicesToWarm()],
 
     'garbage_collection_interval' => null,
 ];
