@@ -51,7 +51,8 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
      *
      * @param  array<string, mixed>  $oauth  Must contain keys: client_id, client_secret, refresh_token.
      *
-     * @throws \RuntimeException When Google's token endpoint rejects the request or returns no access_token.
+     * @throws GoogleAdsAccessRevoked When Google answers invalid_grant (refresh token revoked or expired).
+     * @throws \RuntimeException When Google's token endpoint otherwise rejects the request or returns no access_token.
      */
     public function getAccessToken(array $oauth): string
     {
@@ -65,7 +66,19 @@ final class GoogleAdsClient implements ConversionPlatformContract, ReportsPartia
         $data = $response->json();
 
         if (empty($data['access_token'])) {
-            throw new \RuntimeException('Failed to obtain access token from Google OAuth.');
+            // Only the OAuth error code and description are surfaced: they never echo our credentials.
+            $code = is_array($data) && is_string($data['error'] ?? null) ? $data['error'] : null;
+            $description = is_array($data) && is_string($data['error_description'] ?? null) ? $data['error_description'] : null;
+
+            // invalid_grant means the refresh token was revoked, expired or replaced: retrying
+            // cannot help, the connection has to be re-authorised.
+            if ($code === 'invalid_grant') {
+                throw new GoogleAdsAccessRevoked("Google OAuth refresh token rejected [invalid_grant]: {$description}");
+            }
+
+            $detail = $code === null ? 'HTTP '.$response->status() : trim("{$code}: {$description}", ': ');
+
+            throw new \RuntimeException("Failed to obtain access token from Google OAuth [{$detail}].");
         }
 
         return $data['access_token'];

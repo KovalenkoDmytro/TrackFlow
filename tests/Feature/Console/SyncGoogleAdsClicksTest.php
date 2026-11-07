@@ -119,3 +119,43 @@ it('matches a click whose gclid has surrounding whitespace', function (): void {
 
     expect(DB::table('google_ads_clicks')->where('gclid_hash', hash('sha256', 'AbC123'))->exists())->toBeTrue();
 });
+
+it('deactivates the integration quietly when Google rejects the refresh token with invalid_grant', function (): void {
+    $shop = User::factory()->create();
+    $integration = createSyncableGoogleAdsIntegration($shop, ['credentials' => json_encode([
+        'customer_id' => '1234567890',
+        'oauth' => ['client_id' => 'id', 'client_secret' => 'secret', 'refresh_token' => 'token'],
+    ])]);
+    Http::fake([
+        'https://oauth2.googleapis.com/token' => Http::response(
+            ['error' => 'invalid_grant', 'error_description' => 'Token has been expired or revoked.'], 400),
+    ]);
+
+    $this->artisan('google-ads:sync-clicks', ['--integration' => $integration->getKey()])
+        ->expectsOutputToContain('access revoked')
+        ->assertSuccessful();
+
+    expect($integration->refresh()->active)->toBeFalse();
+});
+
+it('includes the Google OAuth error code when the token request fails for another reason', function (): void {
+    $shop = User::factory()->create();
+    $integration = createSyncableGoogleAdsIntegration($shop, ['credentials' => json_encode([
+        'customer_id' => '1234567890',
+        'oauth' => ['client_id' => 'id', 'client_secret' => 'secret', 'refresh_token' => 'token'],
+    ])]);
+    Http::fake([
+        'https://oauth2.googleapis.com/token' => Http::response(
+            ['error' => 'invalid_client', 'error_description' => 'The OAuth client was not found.'], 401),
+    ]);
+
+    Log::shouldReceive('error')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => str_contains($context['message'], 'invalid_client')
+            && ! str_contains($context['message'], 'secret'));
+
+    $this->artisan('google-ads:sync-clicks', ['--integration' => $integration->getKey()])
+        ->assertFailed();
+
+    expect($integration->refresh()->active)->toBeTrue();
+});
