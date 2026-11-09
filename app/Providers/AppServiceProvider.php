@@ -6,11 +6,13 @@ namespace App\Providers;
 
 use App\Actions\Shopify\AuthenticateShopify;
 use App\Contracts\PlatformResolverContract;
+use App\Http\Middleware\ShopifyIframeProtection;
 use App\Services\PlatformResolver;
 use App\Services\Shopify\LoggingApiHelper;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Osiset\ShopifyApp\Contracts\ApiHelper as IApiHelper;
+use Osiset\ShopifyApp\Http\Middleware\IframeProtection;
 use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
@@ -47,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
         // boot() always runs after every provider's register() phase.
         // See App\Services\Shopify\LoggingApiHelper for why.
         $this->app->bind(IApiHelper::class, LoggingApiHelper::class);
+        $this->app->bind(IframeProtection::class, ShopifyIframeProtection::class);
 
         $this->guardAgainstUnsupportedShopifyRouteConfig();
         $this->guardAgainstUnsupportedShopifyDevBypass();
