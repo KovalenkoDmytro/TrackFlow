@@ -1,6 +1,7 @@
 // resources/js/types/api.ts
 
 export interface ShopRecord {
+  name: string;
   shopify_pixel_id: string | null;
   pixel_enabled: boolean;
 }

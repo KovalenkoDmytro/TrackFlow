@@ -7,11 +7,11 @@ import { router } from './router/index';
 
 const theme = createTheme({
   palette: {
-    primary: { main: '#5557d9', dark: '#4143b5', light: '#eeeeff', contrastText: '#ffffff' },
-    success: { main: '#17845b' },
-    background: { default: '#f5f6f8', paper: '#ffffff' },
-    text: { primary: '#1c2030', secondary: '#72788a' },
-    divider: '#eaecf2',
+    primary: { main: '#315e46', dark: '#214934', light: '#e5f1df', contrastText: '#ffffff' },
+    success: { main: '#4e9363' },
+    background: { default: '#f5f6f3', paper: '#ffffff' },
+    text: { primary: '#20352b', secondary: '#7a897e' },
+    divider: '#e8ece6',
   },
   shape: { borderRadius: 12 },
   typography: {
@@ -22,7 +22,7 @@ const theme = createTheme({
     button: { textTransform: 'none', fontWeight: 650, letterSpacing: 0 },
   },
   components: {
-    MuiCard: { styleOverrides: { root: { borderColor: '#eaecf2', borderRadius: 16, boxShadow: '0 2px 8px rgba(25, 32, 56, .025)' } } },
+    MuiCard: { styleOverrides: { root: { borderColor: '#e8ece6', borderRadius: 18, boxShadow: '0 2px 8px rgba(29, 61, 42, .025)' } } },
     MuiButton: { styleOverrides: { root: { borderRadius: 10, minHeight: 38 }, contained: { boxShadow: 'none' } } },
     MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 10 } } },
   },

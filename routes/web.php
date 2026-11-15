@@ -41,6 +41,7 @@ if (app()->isLocal()) {
         Route::get('/', fn () => view('spa'))->name('dev.home');
         Route::get('/settings/{any}', fn () => view('spa'))->where('any', '.*');
         Route::get('/analytics', fn () => view('spa'));
+        Route::get('/analytics/platform/{platform}', fn () => view('spa'));
     });
 } else {
     // Production: every route is protected by Shopify's embedded-app auth.
@@ -51,6 +52,7 @@ if (app()->isLocal()) {
         Route::get('/', fn () => view('spa'))->name('home');
         Route::get('/settings/{any}', fn () => view('spa'))->where('any', '.*');
         Route::get('/analytics', fn () => view('spa'));
+        Route::get('/analytics/platform/{platform}', fn () => view('spa'));
     });
 }
 

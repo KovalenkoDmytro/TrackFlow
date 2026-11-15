@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 # DB tunnel
 echo "🔌 DB tunnel..."
-ssh -L 3306:127.0.0.1:3306 my-server-cf -fN
+ssh -o ExitOnForwardFailure=yes -L 127.0.0.1:13306:127.0.0.1:3306 my-server-cf -fN
 sleep 1
 
 # Laravel

@@ -31,7 +31,7 @@ export function CalendarDatePicker({ value, onChange, retentionDays }: CalendarD
   const label = selected.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return <>
-    <Button variant="outlined" size="small" startIcon={<CalendarMonthRoundedIcon />} onClick={(event) => setAnchor(event.currentTarget)} aria-label={`Choose date, currently ${label}`}>
+    <Button variant="text" size="small" sx={{ color: '#274b35', px: 1, minWidth: 150 }} startIcon={<CalendarMonthRoundedIcon />} onClick={(event) => setAnchor(event.currentTarget)} aria-label={`Choose date, currently ${label}`}>
       {label}
     </Button>
     <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }} transformOrigin={{ vertical: 'top', horizontal: 'left' }}>

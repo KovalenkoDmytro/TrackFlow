@@ -1,51 +1,25 @@
 import { useState } from 'react';
-import { Alert, Box, Card, CardContent, CircularProgress, Switch, Typography } from '@mui/material';
+import { Alert, Box, Card, CircularProgress, Switch, Typography } from '@mui/material';
+import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import { usePixelToggle } from '../hooks/usePixelToggle';
 
-interface PixelStatusCardProps {
-  pixelEnabled: boolean;
-  pixelId: string | null | undefined;
-}
+interface PixelStatusCardProps { pixelEnabled: boolean; pixelId: string | null | undefined; }
 
 export function PixelStatusCard({ pixelEnabled, pixelId }: PixelStatusCardProps) {
   const toggleMutation = usePixelToggle();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
   const handleChange = (_event: unknown, checked: boolean) => {
     setErrorMessage(null);
-    toggleMutation.mutate(checked, {
-      onError: (error) => setErrorMessage(error instanceof Error ? error.message : 'Failed to update pixel status.'),
-    });
+    toggleMutation.mutate(checked, { onError: (error) => setErrorMessage(error instanceof Error ? error.message : 'Failed to update pixel status.') });
   };
-
   return (
-    <Card variant="outlined" sx={{ mb: 3, overflow: 'hidden' }}>
-      <CardContent sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', gap: 2, p: '18px 22px !important' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ width: 42, height: 42, borderRadius: 2.5, display: 'grid', placeItems: 'center', bgcolor: pixelEnabled ? '#e9f7f0' : '#f1f2f6', color: pixelEnabled ? 'success.main' : 'text.secondary', fontWeight: 800 }}>P</Box>
-          <Box>
-          <Switch
-            checked={pixelEnabled}
-            disabled={toggleMutation.isPending}
-            onChange={handleChange}
-            slotProps={{ input: { 'aria-label': 'Toggle tracking pixel' } }}
-          />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {pixelEnabled ? 'Tracking pixel is active' : 'Tracking pixel is inactive'}
-          </Typography>
-          {toggleMutation.isPending && <CircularProgress size={16} />}
-          <Typography variant="caption" color="text.secondary" sx={{ mt: .25, display: 'block' }}>{pixelEnabled ? 'Events are being collected for your store.' : 'Turn on to start collecting conversion events.'}</Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', pl: { xs: 7, sm: 0 } }}>
-        {pixelEnabled && pixelId && (
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-            {pixelId}
-          </Typography>
-        )}
-        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
-        </Box>
-      </CardContent>
+    <Card variant="outlined" sx={{ p: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, flexWrap: 'wrap' }}>
+        <Box sx={{ width: 48, height: 48, flexShrink: 0, borderRadius: '14px', display: 'grid', placeItems: 'center', bgcolor: pixelEnabled ? '#eaf5e8' : '#f2f4f1', color: pixelEnabled ? '#57865e' : '#89968c' }}><SensorsRoundedIcon /></Box>
+        <Box sx={{ flex: 1, minWidth: 180 }}><Typography sx={{ fontSize: 14, fontWeight: 750 }}>Shopify web pixel</Typography><Typography sx={{ fontSize: 12, color: '#829087', mt: .4 }}>{pixelEnabled ? 'Your pixel is active and collecting events.' : 'Turn on your pixel to start collecting events.'}</Typography>{pixelEnabled && pixelId && <Typography sx={{ fontSize: 11, color: '#9aa69c', mt: .5, overflowWrap: 'anywhere' }}>ID: {pixelId}</Typography>}</Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Typography sx={{ fontSize: 12, color: pixelEnabled ? '#588961' : '#89968c', fontWeight: 700 }}>{pixelEnabled ? 'Active' : 'Inactive'}</Typography>{toggleMutation.isPending && <CircularProgress size={16} />}<Switch checked={pixelEnabled} disabled={toggleMutation.isPending} onChange={handleChange} slotProps={{ input: { 'aria-label': 'Toggle tracking pixel' } }} /></Box>
+      </Box>
+      {errorMessage && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage}</Alert>}
     </Card>
   );
 }

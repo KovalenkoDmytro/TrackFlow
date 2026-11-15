@@ -6,8 +6,9 @@ import { GoogleAdsPage } from '../features/settings/google-ads/GoogleAdsPage';
 import { Ga4Page } from '../features/settings/ga4/Ga4Page';
 import { MetaPage } from '../features/settings/meta/MetaPage';
 import { ComingSoonPage } from '../features/settings/ComingSoonPage';
+import { AppShell } from '../components/ui/AppShell';
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter([{ element: <AppShell />, children: [
   { path: '/', element: <HomePage /> },
   { path: '/analytics', element: <AnalyticsPage /> },
   { path: '/analytics/platform/:platform', element: <AnalyticsPage /> },
@@ -15,4 +16,4 @@ export const router = createBrowserRouter([
   { path: '/settings/ga4', element: <Ga4Page /> },
   { path: '/settings/meta', element: <MetaPage /> },
   { path: '/settings/tiktok', element: <ComingSoonPage /> },
-]);
+] }]);
